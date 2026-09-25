@@ -4,7 +4,7 @@ import {
   countSuccesses, countStressOnes, stressGainOnPush, resolveStressResponse, clamp,
 } from './rules.js';
 import * as store from './store.js';
-import { esc, render } from './app.js';
+import { esc, render, stressRecord } from './app.js';
 
 const $dlg = document.getElementById('roll-dialog');
 let s = null;
@@ -200,6 +200,7 @@ export function handleRollAction(act, el) {
       store.update(c.id, (x) => {
         x.responses = r.responses;
         x.stress = clamp(x.stress + r.stressDelta, 0, MAX_STRESS);
+        x.lastRoll = stressRecord(r);
       });
       s.response = r;
       buzz([80, 60, 80]);

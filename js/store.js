@@ -1,5 +1,8 @@
 // Speicherung aller Charaktere lokal im Browser (localStorage).
-import { ATTRIBUTES, SKILLS, STRESS_RESPONSES, PANIC_RESPONSES, MAX_STRESS, clamp } from './rules.js';
+import {
+  ATTRIBUTES, SKILLS, STRESS_RESPONSES, PANIC_RESPONSES, MAX_STRESS, clamp,
+  deriveHealth, deriveResolve, deriveEncumbranceMax,
+} from './rules.js';
 
 const KEY = 'alien-rpg-characters-v1';
 export const GEAR_ROWS = 10;
@@ -17,6 +20,8 @@ export function blankGear() {
 }
 
 export function newCharacter(type = 'PC') {
+  const attributes = Object.fromEntries(ATTRIBUTES.map((a) => [a.key, 2]));
+  const health = deriveHealth(attributes);
   return {
     id: uid(),
     type,
@@ -30,12 +35,12 @@ export function newCharacter(type = 'PC') {
     talents: '',
     xp: 0,
     storyPoints: 0,
-    attributes: Object.fromEntries(ATTRIBUTES.map((a) => [a.key, 2])),
+    attributes,
     skills: Object.fromEntries(SKILLS.map((s) => [s.key, 0])),
     stress: 0,
-    health: { current: 2, max: 2 },
+    health: { current: health, max: health },
     fatigued: false,
-    resolve: 0,
+    resolve: deriveResolve(attributes),
     radiation: 0,
     responses: flags(STRESS_RESPONSES),
     panic: flags(PANIC_RESPONSES),
@@ -43,7 +48,10 @@ export function newCharacter(type = 'PC') {
     tinyItems: '',
     signatureItem: '',
     armor: { name: '', level: '', weight: '' },
-    encumbrance: { current: '', max: '' },
+    encumbrance: { max: deriveEncumbranceMax(attributes) },
+    // true = Wert folgt automatisch der Regel-Formel, false = von Hand überschrieben
+    auto: { health: true, resolve: true, encMax: true },
+    lastRoll: null,
     cash: '',
     weapons: Array.from({ length: WEAPON_ROWS }, blankWeapon),
     gear: Array.from({ length: GEAR_ROWS }, blankGear),
@@ -64,8 +72,34 @@ export function normalize(c) {
   out.gear = (Array.isArray(c.gear) ? c.gear : []).map((g) => ({ ...blankGear(), ...g }));
   while (out.gear.length < GEAR_ROWS) out.gear.push(blankGear());
   out.stress = clamp(Number(out.stress) || 0, 0, MAX_STRESS);
+  delete out.encumbrance.current; // wird jetzt aus Gear und Waffen berechnet
+  if (!c.auto) {
+    // Ältere Charaktere: Auto nur dort, wo noch der Regelwert oder der alte Standardwert steht.
+    const a = out.attributes;
+    out.auto = {
+      health: [deriveHealth(a), 2].includes(Number(out.health.max)),
+      resolve: [deriveResolve(a), 0].includes(Number(out.resolve)),
+      encMax: ['', String(deriveEncumbranceMax(a))].includes(String(out.encumbrance.max ?? '')),
+    };
+    applyDerived(out);
+  } else {
+    out.auto = { ...base.auto, ...c.auto };
+  }
   out.id = out.id || uid();
   return out;
+}
+
+// Werte mit Auto-Flag aus den Attributen neu berechnen.
+export function applyDerived(c) {
+  const a = c.attributes;
+  if (c.auto.health) {
+    const max = deriveHealth(a);
+    if (c.health.current === c.health.max || c.health.current > max) c.health.current = max;
+    c.health.max = max;
+  }
+  if (c.auto.resolve) c.resolve = deriveResolve(a);
+  if (c.auto.encMax) c.encumbrance.max = deriveEncumbranceMax(a);
+  return c;
 }
 
 let cache = null;

@@ -1,12 +1,22 @@
 import {
   ATTRIBUTES, STRESS_RESPONSES, PANIC_RESPONSES, MAX_STRESS,
   skillsFor, skillByKey, responsePenalties, clamp,
+  DERIVED, encumbrance, pointWarnings, strongestRolls,
+  DEFAULT_ATTRIBUTE_POINTS, DEFAULT_SKILL_POINTS,
+  resolveStressResponse, resolvePanic, STRESS_DURATION, PANIC_ENDS,
 } from './rules.js';
 import * as store from './store.js';
 import { openRoll, handleRollAction } from './roll.js';
+import { RULES } from './ruletext.js';
 
 const $main = document.getElementById('main');
 const ui = loadUi();
+
+const settings = () => ({
+  checkPoints: ui.checkPoints ?? true,
+  attrPoints: ui.attrPoints ?? DEFAULT_ATTRIBUTE_POINTS,
+  skillPoints: ui.skillPoints ?? DEFAULT_SKILL_POINTS,
+});
 
 // ---------- Hilfsfunktionen ----------
 
@@ -71,8 +81,40 @@ function activeResponseChips(c) {
     ...PANIC_RESPONSES.filter((r) => c.panic[r.key]).map((r) => `<span class="chip chip-panic">${r.label}</span>`),
   ];
   if (c.fatigued) chips.unshift('<span class="chip chip-warn">Fatigued</span>');
+  if (c.encumbrance.max !== '' && encumbrance(c) > Number(c.encumbrance.max)) chips.unshift('<span class="chip chip-warn">Überladen</span>');
+  if (c.health.current <= 0) chips.unshift('<span class="chip chip-warn">Broken</span>');
   return chips.join('');
 }
+
+function encHtml(c) {
+  const cur = encumbrance(c);
+  const max = Number(c.encumbrance.max);
+  const over = c.encumbrance.max !== '' && cur > max;
+  return `<span class="enc ${over ? 'over' : ''}">${cur} / ${esc(c.encumbrance.max) || '—'}${over ? ' · überladen' : ''}</span>`;
+}
+
+function pointsHint(c) {
+  const st = settings();
+  if (c.type !== 'PC' || !st.checkPoints) return '';
+  const warn = pointWarnings(c, st.attrPoints, st.skillPoints);
+  return warn.length ? `<div class="points-warn">${warn.map((w) => `<p>${esc(w)}</p>`).join('')}</div>` : '';
+}
+
+const lastRollHtml = (c) => {
+  const r = c.lastRoll;
+  if (!r) return '';
+  return `<div class="last-roll ${r.kind}">
+    <div class="lr-head">
+      <span class="lr-kind">${r.kind === 'panic' ? 'Panikwurf' : 'Stress Response'}</span>
+      <button class="icon-btn small" data-act="clear-last" data-id="${c.id}" aria-label="Ergebnis ausblenden">✕</button>
+    </div>
+    <div class="resp-calc">W6 <b>${r.die}</b> + Stress <b>${r.stress}</b> − Resolve <b>${r.resolve}</b> = <b>${r.total}</b></div>
+    <div class="resp-name">${esc(r.label)}</div>
+    <p>${esc(r.effect)}</p>
+    ${r.note ? `<p class="hint">${esc(r.note)}</p>` : ''}
+    <p class="lr-dur"><b>Dauer:</b> ${esc(r.duration)}</p>
+  </div>`;
+};
 
 // ---------- Ansichten ----------
 
@@ -177,7 +219,7 @@ function sheetView(id) {
   const gearHtml = `
     <dl class="kv">
       <dt>Armor</dt><dd>${esc(c.armor.name) || '—'}${c.armor.level !== '' ? ` · Level ${esc(c.armor.level)}` : ''}${c.armor.weight !== '' ? ` · Weight ${esc(c.armor.weight)}` : ''}</dd>
-      <dt>Encumbrance</dt><dd>${esc(c.encumbrance.current) || '—'} / ${esc(c.encumbrance.max) || '—'}</dd>
+      <dt>Encumbrance</dt><dd>${encHtml(c)}</dd>
       <dt>Cash</dt><dd>${esc(c.cash) || '—'}</dd>
       <dt>Signature Item</dt><dd>${esc(c.signatureItem) || '—'}</dd>
       <dt>Tiny Items</dt><dd>${nl2br(c.tinyItems) || '—'}</dd>
@@ -207,7 +249,7 @@ function sheetView(id) {
       <a class="btn btn-small" href="#/edit/${id}">Bearbeiten</a>
     </div>
     ${status}
-    ${section('skills', 'Attribute & Skills', `<p class="hint">Tippe auf ein Attribut oder einen Skill, um zu würfeln.</p><div class="attrs">${attrs}</div>`, { open: true })}
+    ${section('skills', 'Attribute & Skills', `${pointsHint(c)}<p class="hint">Tippe auf ein Attribut oder einen Skill, um zu würfeln.</p><div class="attrs">${attrs}</div>`, { open: true })}
     ${section('responses', 'Stress & Panic Responses',
       `${c.hasStress ? `<h4>Stress Responses</h4>${respList('responses', STRESS_RESPONSES)}` : ''}<h4>Panic Responses</h4>${respList('panic', PANIC_RESPONSES)}`,
       { badge: activeCount || '' })}
@@ -226,8 +268,15 @@ function overviewView() {
   const filters = [['all', 'Alle'], ['PC', 'PCs'], ['NPC', 'NPCs']]
     .map(([v, l]) => `<button class="seg ${ui.filter === v ? 'active' : ''}" data-act="filter" data-v="${v}">${l}</button>`).join('');
 
-  const rows = list.map((c) => `
-    <div class="card ov ${c.health.current <= 0 ? 'is-down' : ''}">
+  const rows = list.map((c) => {
+    const broken = c.health.current <= 0;
+    const top = strongestRolls(c, 2).map((o) => `
+      <button class="top-roll" data-act="roll" data-id="${c.id}" data-attr="${o.attr}" ${o.skill ? `data-skill="${o.skill}"` : ''}>
+        <span>${o.label}</span><span class="dice-count">${o.dice}<i class="dicon"></i></span>
+      </button>`).join('');
+    const anyPanic = PANIC_RESPONSES.some((r) => c.panic[r.key]);
+    return `
+    <div class="card ov ${broken ? 'is-down' : ''}">
       <div class="ov-head">
         <a href="#/c/${c.id}" class="ov-name">${esc(c.name || 'Ohne Namen')}</a>${typeBadge(c)}
       </div>
@@ -240,6 +289,10 @@ function overviewView() {
             <button class="btn-round" data-act="stat" data-id="${c.id}" data-field="stress" data-d="1" aria-label="Stress erhöhen">+</button>
           </span>
           <div class="meter"><div style="width:${c.stress * 10}%"></div></div>
+          <div class="resp-btns">
+            <button class="btn btn-tiny btn-stress" data-act="quick-stress" data-id="${c.id}" ${broken ? 'disabled' : ''}>Stress-Wurf</button>
+            <button class="btn btn-tiny btn-panic" data-act="quick-panic" data-id="${c.id}" ${broken ? 'disabled' : ''}>Panik-Wurf</button>
+          </div>
         </div>` : '<div class="ov-cell"><span class="stepper-label">Stress</span><span class="muted">—</span></div>'}
         <div class="ov-cell">
           <span class="stepper-label">Health</span>
@@ -251,13 +304,16 @@ function overviewView() {
           <div class="meter health"><div style="width:${c.health.max ? clamp(c.health.current / c.health.max, 0, 1) * 100 : 0}%"></div></div>
         </div>
       </div>
+      ${broken && c.hasStress ? '<p class="hint">Broken: kein weiterer Stress, keine Panikwürfe.</p>' : ''}
+      ${lastRollHtml(c)}
+      <div class="top-rolls">${top}</div>
       <div class="ov-facts">
         <span>Resolve <b>${c.resolve}</b></span>
-        <span>Radiation <b>${c.radiation}</b></span>
         <span>Armor <b>${esc(c.armor.level) || '—'}</b></span>
       </div>
-      <div class="chips">${activeResponseChips(c)}</div>
-    </div>`).join('');
+      <div class="chips">${activeResponseChips(c)}${anyPanic ? `<button class="chip chip-btn" data-act="end-panic" data-id="${c.id}">Panik beenden</button>` : ''}</div>
+    </div>`;
+  }).join('');
 
   return `<div class="segments">${filters}</div>${rows || '<p class="empty">Keine Charaktere vorhanden.</p>'}`;
 }
@@ -269,6 +325,14 @@ function editView(id, newType) {
 
   const text = (name, label, value, attrs = '') => `<label class="field"><span>${label}</span><input name="${name}" value="${esc(value)}" ${attrs}></label>`;
   const num = (name, label, value, min = 0, max = 99) => `<label class="field num"><span>${label}</span><input type="number" inputmode="numeric" name="${name}" value="${esc(value)}" min="${min}" max="${max}"></label>`;
+  const derived = (key, name, label, value, max) => {
+    const rule = DERIVED[key](c.attributes);
+    const isAuto = c.auto[key];
+    return `<label class="field num"><span>${label}</span>
+      <input type="number" inputmode="numeric" name="${name}" value="${esc(value)}" min="0" max="${max}" data-derive="${key}" data-auto="${isAuto ? '1' : ''}">
+      <small class="rule-hint ${isAuto ? 'is-auto' : ''}">Regel: <b class="rule-val">${rule}</b><span class="auto-tag"> · automatisch</span></small>
+    </label>`;
+  };
   const area = (name, label, value, rows = 3) => `<label class="field"><span>${label}</span><textarea name="${name}" rows="${rows}">${esc(value)}</textarea></label>`;
 
   const attrFields = ATTRIBUTES.map((a) => `
@@ -323,18 +387,18 @@ function editView(id, newType) {
         ${text('career', 'Career', c.career)}
       </div>
 
-      <div class="card form-sec"><h3>Attribute & Skills</h3>${attrFields}</div>
+      <div class="card form-sec"><h3>Attribute & Skills</h3><div id="points-live">${pointsHint(c)}</div>${attrFields}</div>
 
       <div class="card form-sec">
         <h3>Zustand</h3>
         <div class="field-row">
           ${num('health.current', 'Health aktuell', c.health.current, 0, 20)}
-          ${num('health.max', 'Health max', c.health.max, 0, 20)}
+          ${derived('health', 'health.max', 'Health max', c.health.max, 20)}
         </div>
-        <p class="hint">Max Health entspricht normalerweise Strength.</p>
+        <p class="hint">Health max = (Strength + Agility) ÷ 2, Resolve = (Wits + Empathy) ÷ 2, jeweils aufgerundet. Encumbrance max = Strength × 2. Die Werte passen sich automatisch an, solange du sie nicht von Hand änderst.</p>
         <div class="field-row">
           ${num('stress', 'Stress Level', c.stress, 0, MAX_STRESS)}
-          ${num('resolve', 'Resolve', c.resolve, 0, 20)}
+          ${derived('resolve', 'resolve', 'Resolve', c.resolve, 20)}
           ${num('radiation', 'Radiation', c.radiation, 0, 99)}
         </div>
         <label class="check"><input type="checkbox" name="fatigued" ${c.fatigued ? 'checked' : ''}><span><b>Fatigued</b></span></label>
@@ -361,10 +425,11 @@ function editView(id, newType) {
           ${text('armor.weight', 'Armor Weight', c.armor.weight)}
         </div>
         <div class="field-row">
-          ${text('encumbrance.current', 'Encumbrance', c.encumbrance.current)}
-          ${text('encumbrance.max', 'Encumbrance max', c.encumbrance.max)}
+          <div class="field"><span>Encumbrance</span><div id="enc-live" class="enc-box">${encHtml(c)}</div></div>
+          ${derived('encMax', 'encumbrance.max', 'Encumbrance max', c.encumbrance.max, 99)}
           ${text('cash', 'Cash', c.cash)}
         </div>
+        <p class="hint">Encumbrance wird aus den Weight-Werten von Gear, Waffen und Armor berechnet (z. B. 1, 2, ½ oder 0,5).</p>
         ${text('signatureItem', 'Signature Item', c.signatureItem)}
         ${area('tinyItems', 'Tiny Items', c.tinyItems)}
         <h4>Gear</h4>
@@ -399,15 +464,44 @@ function dataView() {
       <p class="hint">Beim Import werden Charaktere mit gleicher ID überschrieben, neue kommen dazu. Nichts wird gelöscht.</p>
     </div>
     <div class="card form-sec">
-      <h3>Regeln (Evolved Edition)</h3>
-      <ul class="rules">
-        <li>Basiswürfel = Attribut + Skill, Modifikatoren ändern nur Basiswürfel, mindestens 1 Basiswürfel.</li>
-        <li>Stresswürfel = aktuelles Stress Level.</li>
-        <li>Jede 6 ist ein Erfolg, eine 1 auf einem Stresswürfel löst eine Stress Response aus.</li>
-        <li>Pushen: Stress +1 (Jumpy: +2), dafür kommen neue Stresswürfel dazu. Alle Würfel ohne 6 werden neu gewürfelt. Nur einmal, nicht nach einer 1 auf Stresswürfeln, nicht wenn Deflated. NPCs pushen nie.</li>
-        <li>Stress Response: D6 + Stress Level − Resolve. Bereits vorhandene Response gibt stattdessen +1 Stress.</li>
-      </ul>
+      <h3>Punkteprüfung</h3>
+      <p class="hint">Zeigt auf dem Charakterbogen von PCs einen Hinweis, wenn zu wenige oder zu viele Punkte auf Attribute bzw. Skills verteilt sind. Nach Steigerungen durch Erfahrung am besten ausschalten.</p>
+      <label class="check"><input type="checkbox" data-setting="checkPoints" ${settings().checkPoints ? 'checked' : ''}><span><b>Punkteprüfung aktiv</b></span></label>
+      <div class="field-row">
+        <label class="field num"><span>Attributpunkte</span><input type="number" inputmode="numeric" min="0" max="40" data-setting="attrPoints" value="${settings().attrPoints}"></label>
+        <label class="field num"><span>Skillpunkte</span><input type="number" inputmode="numeric" min="0" max="60" data-setting="skillPoints" value="${settings().skillPoints}"></label>
+      </div>
     </div>`;
+}
+
+function rulesView() {
+  const cats = RULES.map((cat) => section(`rules-${cat.key}`, cat.title, cat.topics.map((t) => `
+    <details class="rule-topic">
+      <summary>${t.title}</summary>
+      <div class="rule-body">${t.html}</div>
+    </details>`).join(''), { badge: cat.topics.length })).join('');
+  return `
+    <input id="rule-search" type="search" placeholder="Regeln durchsuchen …" autocomplete="off">
+    <div id="rules">${cats}</div>
+    <p class="hint">Zusammenfassung der ALIEN RPG Evolved Edition. Im Zweifel gilt das Regelbuch.</p>`;
+}
+
+let searching = false;
+function filterRules(q) {
+  const term = q.trim().toLowerCase();
+  searching = true;
+  for (const cat of document.querySelectorAll('#rules > details')) {
+    let hits = 0;
+    for (const topic of cat.querySelectorAll('.rule-topic')) {
+      const match = !term || topic.textContent.toLowerCase().includes(term);
+      topic.hidden = !match;
+      topic.open = !!term && match;
+      if (match) hits++;
+    }
+    cat.hidden = hits === 0;
+    cat.open = term ? hits > 0 : (ui.open[cat.dataset.sec] ?? false);
+  }
+  setTimeout(() => { searching = false; });
 }
 
 const notFound = () => '<p class="empty">Charakter nicht gefunden. <a href="#/">Zur Liste</a></p>';
@@ -428,6 +522,7 @@ export function render() {
     case 'new': html = editView(null, arg === 'NPC' ? 'NPC' : 'PC'); title = 'Neuer Charakter'; back = '#/'; break;
     case 'overview': html = overviewView(); tab = 'overview'; title = 'Übersicht'; break;
     case 'data': html = dataView(); tab = 'data'; title = 'Daten'; break;
+    case 'rules': html = rulesView(); tab = 'rules'; title = 'Regeln'; break;
     default: html = listView();
   }
 
@@ -450,6 +545,48 @@ function changeStat(id, field, d) {
   render();
 }
 
+// Ergebnis einer Stress Response als Eintrag für die Übersicht.
+export function stressRecord(r) {
+  return {
+    kind: 'stress', die: r.die, stress: r.stress, resolve: r.resolve, total: r.total,
+    label: r.response.label,
+    effect: r.response.effect,
+    note: r.note !== r.response.effect ? r.note : '',
+    duration: STRESS_DURATION[r.response.key] || STRESS_DURATION.default,
+    at: Date.now(),
+  };
+}
+
+function quickStress(id) {
+  store.update(id, (c) => {
+    const r = resolveStressResponse(c);
+    c.responses = r.responses;
+    c.stress = clamp(c.stress + r.stressDelta, 0, MAX_STRESS);
+    c.lastRoll = stressRecord(r);
+  });
+  navigator.vibrate?.([80, 60, 80]);
+  render();
+}
+
+function quickPanic(id) {
+  store.update(id, (c) => {
+    const r = resolvePanic(c);
+    c.panic = r.panic;
+    c.stress = clamp(c.stress + r.stressDelta, 0, MAX_STRESS);
+    const notes = [];
+    if (r.bumped) notes.push('Das Ergebnis war bereits aktiv, deshalb die nächsthöhere Response.');
+    if (r.response.track) notes.push(PANIC_ENDS);
+    if (r.trauma) notes.push('Panikwurf 9+: Nach der Sitzung Empathy-Wurf (kein Push) gegen mentales Trauma.');
+    c.lastRoll = {
+      kind: 'panic', die: r.die, stress: r.stress, resolve: r.resolve, total: r.total,
+      label: r.response.label, effect: r.response.effect, duration: r.response.duration,
+      note: notes.join(' '), at: Date.now(),
+    };
+  });
+  navigator.vibrate?.([120, 60, 120]);
+  render();
+}
+
 function readForm(form) {
   const id = form.dataset.id;
   const c = id ? structuredClone(store.get(id)) : store.newCharacter(form.dataset.type);
@@ -459,6 +596,7 @@ function readForm(form) {
     let target = c;
     for (let i = 0; i < path.length - 1; i++) target = target[path[i]];
     const key = path[path.length - 1];
+    if (el.dataset.derive) c.auto[el.dataset.derive] = el.dataset.auto === '1';
     if (el.type === 'checkbox') target[key] = el.checked;
     else if (el.type === 'number') target[key] = el.value === '' ? 0 : Number(el.value);
     else target[key] = el.value;
@@ -504,6 +642,21 @@ document.addEventListener('click', (e) => {
       render();
       break;
     }
+    case 'quick-stress':
+      quickStress(id);
+      break;
+    case 'quick-panic':
+      quickPanic(id);
+      break;
+    case 'clear-last':
+      store.update(id, (c) => { c.lastRoll = null; });
+      render();
+      break;
+    case 'end-panic':
+      store.update(id, (c) => { PANIC_RESPONSES.forEach((r) => { c.panic[r.key] = false; }); });
+      toast('Panik beendet');
+      render();
+      break;
     case 'toggle-fatigued':
       store.update(id, (c) => { c.fatigued = !c.fatigued; });
       render();
@@ -537,6 +690,11 @@ document.addEventListener('change', async (e) => {
   if (el.dataset.act === 'toggle-response') {
     store.update(el.dataset.id, (c) => { c[el.dataset.group][el.dataset.key] = el.checked; });
     render();
+  } else if (el.dataset.setting) {
+    const k = el.dataset.setting;
+    ui[k] = el.type === 'checkbox' ? el.checked : Math.max(0, Number(el.value) || 0);
+    saveUi();
+    toast('Gespeichert');
   } else if (el.dataset.inline) {
     store.update(el.dataset.id, (c) => { c[el.dataset.inline] = el.value; });
     toast('Gespeichert');
@@ -551,6 +709,39 @@ document.addEventListener('change', async (e) => {
   }
 });
 
+// Formular live nachrechnen: Regelwerte, Encumbrance, Punkte-Hinweis.
+function refreshForm(form, target) {
+  const input = (name) => form.elements.namedItem(name);
+  if (target?.name === 'type') input('hasStress').checked = target.value === 'PC';
+
+  const attrs = Object.fromEntries(ATTRIBUTES.map((a) => [a.key, Number(input(`attributes.${a.key}`).value) || 0]));
+  for (const el of form.querySelectorAll('[data-derive]')) {
+    const rule = DERIVED[el.dataset.derive](attrs);
+    if (el === target) {
+      el.dataset.auto = Number(el.value) === rule ? '1' : '';
+    } else if (el.dataset.auto === '1' && Number(el.value) !== rule) {
+      if (el.name === 'health.max') {
+        const cur = input('health.current');
+        if (Number(cur.value) === Number(el.value) || Number(cur.value) > rule) cur.value = rule;
+      }
+      el.value = rule;
+    }
+    const hint = el.parentElement.querySelector('.rule-hint');
+    hint.querySelector('.rule-val').textContent = rule;
+    hint.classList.toggle('is-auto', el.dataset.auto === '1');
+  }
+
+  const c = readForm(form);
+  form.querySelector('#enc-live').innerHTML = encHtml(c);
+  form.querySelector('#points-live').innerHTML = pointsHint(c);
+}
+
+document.addEventListener('input', (e) => {
+  const form = e.target.closest('#edit-form');
+  if (form) refreshForm(form, e.target);
+  if (e.target.id === 'rule-search') filterRules(e.target.value);
+});
+
 document.addEventListener('submit', (e) => {
   if (e.target.id !== 'edit-form') return;
   e.preventDefault();
@@ -562,7 +753,7 @@ document.addEventListener('submit', (e) => {
 // Auf/Zu-Zustand der Abschnitte merken (toggle-Events blubbern nicht, daher capture).
 document.addEventListener('toggle', (e) => {
   const key = e.target.dataset?.sec;
-  if (!key) return;
+  if (!key || searching) return;
   ui.open[key] = e.target.open;
   saveUi();
 }, true);

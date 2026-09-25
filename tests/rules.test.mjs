@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import {
   rollPool, pushPool, countSuccesses, countStressOnes, lookupStressResponse,
   applyStressResponse, resolveStressResponse, responsePenalties, stressGainOnPush, canPushAtAll,
+  deriveHealth, deriveResolve, deriveEncumbranceMax, parseWeight, encumbrance, pointWarnings,
+  strongestRolls, resolvePanic, lookupPanic,
 } from '../js/rules.js';
 
 // Liefert nacheinander feste Würfelwerte (1–6).
@@ -80,4 +82,54 @@ test('Mess Up: Aktion scheitert, +1 Stress', () => {
 test('Abzüge: Tunnel Vision −2 auf Wits', () => {
   assert.deepEqual(responsePenalties({ tunnelVision: true, shakes: true }, 'wits'), [{ label: 'Tunnel Vision', value: -2 }]);
   assert.deepEqual(responsePenalties({}, 'wits'), []);
+});
+
+test('Abgeleitete Werte: aufgerundet', () => {
+  const a = { strength: 3, agility: 4, wits: 5, empathy: 2 };
+  assert.equal(deriveHealth(a), 4);
+  assert.equal(deriveResolve(a), 4);
+  assert.equal(deriveEncumbranceMax(a), 6);
+});
+
+test('Encumbrance aus Gear, Waffen und Armor', () => {
+  assert.equal(parseWeight('½'), 0.5);
+  assert.equal(parseWeight('0,5'), 0.5);
+  assert.equal(parseWeight(''), 0);
+  const c = { gear: [{ weight: '1' }, { weight: '½' }], weapons: [{ weight: '2' }], armor: { weight: '1' } };
+  assert.equal(encumbrance(c), 4.5);
+});
+
+test('Punkteprüfung', () => {
+  const c = { attributes: { strength: 4, agility: 4, wits: 3, empathy: 3 }, skills: { stamina: 3, comtech: 3, command: 4 } };
+  assert.deepEqual(pointWarnings(c, 14, 10), []);
+  c.attributes.strength = 3;
+  c.skills.command = 5;
+  assert.equal(pointWarnings(c, 14, 10).length, 2);
+});
+
+test('Stärkste Würfe: Skills vor gleich starkem Attribut, Skill 0 zählt nicht', () => {
+  const c = {
+    attributes: { strength: 5, agility: 2, wits: 4, empathy: 2 },
+    skills: { observation: 2, stamina: 0 },
+    responses: {},
+  };
+  const top = strongestRolls(c, 2);
+  assert.deepEqual(top.map((t) => [t.label, t.dice]), [['Observation', 6], ['Strength', 5]]);
+});
+
+test('Panik: Tabelle, Stressänderung und nächsthöhere Response', () => {
+  assert.equal(lookupPanic(0).key, 'keepingCool');
+  assert.equal(lookupPanic(1).key, 'spooked');
+  assert.equal(lookupPanic(15).key, 'catatonic');
+  const r = resolvePanic(char({ stress: 5, resolve: 2, panic: {} }), fixed(4));
+  assert.equal(r.total, 7);
+  assert.equal(r.response.key, 'freeze');
+  assert.equal(r.panic.freeze, true);
+  const b = resolvePanic(char({ stress: 5, resolve: 2, panic: { freeze: true } }), fixed(4));
+  assert.equal(b.response.key, 'seekCover');
+  assert.equal(b.bumped, true);
+  assert.equal(b.stressDelta, -1);
+  const s = resolvePanic(char({ stress: 0, resolve: 0, panic: {} }), fixed(1));
+  assert.equal(s.response.key, 'spooked');
+  assert.equal(s.stressDelta, 1);
 });
