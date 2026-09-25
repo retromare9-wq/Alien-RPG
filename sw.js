@@ -1,6 +1,6 @@
 // Service Worker: App offline verfügbar machen.
 // Strategie: erst Netz (damit Updates sofort ankommen), bei Offline aus dem Cache.
-const CACHE = 'alien-crew-v1';
+const CACHE = 'alien-crew-v2';
 const ASSETS = [
   './',
   './index.html',

@@ -49,7 +49,8 @@ small { color: var(--muted); }
   border: 0; border-radius: 10px; background: transparent; color: var(--text);
   font-size: 1.6rem; text-decoration: none; cursor: pointer;
 }
-.icon-btn[hidden] { display: none; }
+.icon-btn[hidden], #install[hidden] { display: none; }
+#install { margin-left: auto; }
 
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
