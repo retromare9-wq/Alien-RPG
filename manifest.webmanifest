@@ -1,0 +1,17 @@
+{
+  "name": "Alien RPG Crew",
+  "short_name": "Alien Crew",
+  "description": "Charakterbögen, Würfel und Stress-Übersicht für ALIEN RPG.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1412",
+  "theme_color": "#0b1412",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
