@@ -575,23 +575,6 @@ window.addEventListener('hashchange', () => {
 render();
 navigator.storage?.persist?.().catch(() => {});
 
-// Eigener Installieren-Knopf, sobald Chrome die App als installierbar meldet.
-let installPrompt = null;
-const $install = document.getElementById('install');
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  installPrompt = e;
-  $install.hidden = false;
-});
-$install.addEventListener('click', async () => {
-  if (!installPrompt) return;
-  installPrompt.prompt();
-  await installPrompt.userChoice.catch(() => {});
-  installPrompt = null;
-  $install.hidden = true;
-});
-window.addEventListener('appinstalled', () => { $install.hidden = true; });
-
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
