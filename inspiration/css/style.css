@@ -1,0 +1,122 @@
+/* Farben und Grundbausteine wie in Alien Crew, damit beide Apps zusammenpassen. */
+:root {
+  --bg: #0b1412;
+  --panel: #13211e;
+  --panel-2: #1a2c28;
+  --line: #2a4540;
+  --text: #dfeee9;
+  --muted: #8aa9a1;
+  --accent: #2fc4a4;
+  --accent-dim: #1d7c68;
+  --stress: #f4c430;
+  --radius: 12px;
+  --mono: ui-monospace, "Cascadia Mono", "Roboto Mono", "DejaVu Sans Mono", monospace;
+  --leiste-h: 84px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+  padding-bottom: calc(var(--leiste-h) + env(safe-area-inset-bottom) + 16px);
+  -webkit-tap-highlight-color: transparent;
+}
+h2 { font: 600 .8rem var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 10px; }
+small { color: var(--muted); }
+
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+  background: rgba(11, 20, 18, .94);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+.topbar h1 { margin: 0; font: 600 1.05rem var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+
+main { max-width: 720px; margin: 0 auto; padding: 14px 16px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; }
+.btn {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 44px; padding: 8px 16px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  font: 600 .95rem system-ui, sans-serif; cursor: pointer;
+}
+.btn:active { transform: translateY(1px); }
+.btn small { font-weight: 400; font-size: .75rem; color: inherit; opacity: .85; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #04120e; }
+.btn-primary:disabled { background: var(--panel-2); border-color: var(--line); color: var(--muted); cursor: default; }
+.btn-small { min-height: 36px; padding: 6px 14px; font-size: .85rem; }
+.btn.big { min-height: 56px; font-size: 1.1rem; }
+.btn.wide { width: 100%; }
+.btn-round {
+  width: 38px; height: 38px; flex: none; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--accent);
+  font-size: 1.15rem; line-height: 1; cursor: pointer;
+}
+.empty { color: var(--muted); text-align: center; padding: 28px 0 8px; margin: 0; }
+.hint { color: var(--muted); font-size: .85rem; }
+
+/* ---------- Kategorien ---------- */
+.auswahl-knoepfe { display: flex; gap: 8px; margin-bottom: 10px; }
+.kat-gitter { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (min-width: 560px) { .kat-gitter { grid-template-columns: repeat(3, 1fr); } }
+.kat {
+  min-height: 52px; padding: 8px 10px; border-radius: 10px;
+  border: 1px dashed var(--line); background: transparent; color: var(--muted);
+  font: 600 .9rem system-ui, sans-serif; text-align: left; cursor: pointer; overflow-wrap: break-word; hyphens: auto;
+}
+.kat[aria-pressed="true"] {
+  border-style: solid; border-color: var(--accent); background: #10302a; color: var(--text);
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.segments { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--panel); padding: 4px; border-radius: 12px; border: 1px solid var(--line); margin-bottom: 16px; }
+.seg { min-height: 40px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: 700 1rem var(--mono); cursor: pointer; }
+.seg.active { background: var(--panel-2); color: var(--accent); }
+
+/* ---------- Ergebnis ---------- */
+.treffer { padding: 0; overflow: hidden; }
+.treffer-kopf {
+  display: flex; justify-content: space-between; align-items: center; width: 100%;
+  padding: 9px 14px; border: 0; background: var(--accent-dim); color: #d9fff5; cursor: pointer;
+  font: 700 .8rem var(--mono); letter-spacing: .08em; text-transform: uppercase; text-align: left;
+}
+.treffer ul { list-style: none; margin: 0; padding: 0; }
+.treffer li { display: flex; align-items: center; gap: 10px; padding: 12px 10px 12px 14px; border-top: 1px solid var(--line); }
+.treffer li:first-child { border-top: 0; }
+.wert { flex: 1; font-size: 1.08rem; overflow-wrap: anywhere; }
+.neu-gewuerfelt .treffer { animation: auftauchen .35s ease-out both; }
+.neu-gewuerfelt .treffer:nth-child(2) { animation-delay: .05s; }
+.neu-gewuerfelt .treffer:nth-child(3) { animation-delay: .1s; }
+.neu-gewuerfelt .treffer:nth-child(n+4) { animation-delay: .15s; }
+@keyframes auftauchen { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .neu-gewuerfelt .treffer { animation: none; } }
+
+/* ---------- Verlauf ---------- */
+details.sec { padding: 0; }
+details.sec > summary {
+  list-style: none; display: flex; align-items: center; gap: 8px; padding: 14px; cursor: pointer;
+  font: 700 .85rem var(--mono); letter-spacing: .06em; text-transform: uppercase;
+}
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary::after { content: "▾"; color: var(--accent); margin-left: auto; transition: transform .2s; }
+details.sec[open] > summary::after { transform: rotate(180deg); }
+.badge { background: var(--accent-dim); border-radius: 20px; padding: 1px 8px; font-size: .75rem; }
+.sec-body { padding: 0 14px 14px; }
+.verlauf-eintrag { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: .9rem; overflow-wrap: anywhere; }
+.verlauf-eintrag b { color: var(--accent); font-weight: 600; }
+#verlauf-leeren { margin-top: 12px; }
+
+/* ---------- Würfelleiste unten ---------- */
+.wurfleiste {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(19, 33, 30, .96); border-top: 1px solid var(--line);
+}
+.wurfleiste .btn { max-width: 688px; margin: 0 auto; display: flex; }
