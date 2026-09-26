@@ -562,10 +562,17 @@ function dataView() {
     <h2>Daten & Backup</h2>
     <div class="card form-sec">
       <p>Alle Charaktere (${n}), Orte und eigene Equipment-Änderungen liegen nur lokal auf diesem Gerät im Browser-Speicher. Mach regelmäßig ein Backup, vor allem bevor du Browserdaten löschst.</p>
-      <button class="btn btn-primary wide" data-act="export">Backup exportieren (JSON)</button>
-      <label class="btn wide file-btn">Backup importieren
-        <input type="file" accept="application/json,.json" data-act="import" hidden>
+      <button class="btn btn-primary wide" data-act="export">Backup exportieren (Datei)</button>
+      <button class="btn wide" data-act="copy-backup">Backup als Text kopieren</button>
+      <textarea id="backup-text" rows="4" readonly hidden></textarea>
+      <label class="btn wide file-btn">Backup importieren (Datei)
+        <input type="file" accept="application/json,.json,text/plain,.txt" data-act="import" hidden>
       </label>
+      <details class="paste-import">
+        <summary>Backup aus kopiertem Text importieren</summary>
+        <textarea id="paste-backup" rows="4" placeholder="Backup-Text hier einfügen …"></textarea>
+        <button class="btn wide" data-act="paste-import">Text importieren</button>
+      </details>
       <p class="hint">Beim Import werden Einträge mit gleicher ID überschrieben, neue kommen dazu. Nichts wird gelöscht.</p>
     </div>
     <div class="card form-sec">
@@ -722,18 +729,57 @@ function readForm(form) {
   return c;
 }
 
-function download(filename, text) {
-  const blob = new Blob([text], { type: 'application/json' });
-  const file = new File([blob], filename, { type: 'application/json' });
-  if (navigator.canShare?.({ files: [file] })) {
-    navigator.share({ files: [file], title: filename }).catch(() => {});
-    return;
+// Backup sichern. Android teilt keine .json-Dateien, deshalb als .txt teilen
+// (Inhalt bleibt JSON). Klappt das nicht, normaler Download mit sichtbarer Rückmeldung.
+async function download(filename, text) {
+  const txtName = filename.replace(/\.json$/, '.txt');
+  const candidates = [
+    new File([text], filename, { type: 'application/json' }),
+    new File([text], txtName, { type: 'text/plain' }),
+  ];
+  const file = candidates.find((f) => navigator.canShare?.({ files: [f] }));
+  if (file) {
+    try {
+      await navigator.share({ files: [file], title: file.name });
+      toast('Backup geteilt');
+      return;
+    } catch (err) {
+      if (err?.name === 'AbortError') return; // Teilen-Menü bewusst geschlossen
+    }
   }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   a.download = filename;
+  document.body.append(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  toast('Backup gespeichert – siehe Ordner „Downloads“');
+}
+
+// Fallback, der immer geht: Backup als Text in die Zwischenablage.
+async function copyBackup() {
+  const text = store.exportJson();
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Backup kopiert – z. B. in eine Notiz oder Mail einfügen');
+  } catch {
+    const box = document.getElementById('backup-text');
+    box.value = text;
+    box.hidden = false;
+    box.select();
+    toast('Text markiert – bitte manuell kopieren');
+  }
+}
+
+function runImport(text) {
+  try {
+    const { added, updated, locs } = store.importJson(text);
+    toast(`Import: ${added} neu, ${updated} aktualisiert${locs ? `, ${locs} Orte` : ''}`);
+    render();
+  } catch (err) {
+    alert(`Import fehlgeschlagen: ${err.message}`);
+  }
 }
 
 document.addEventListener('click', (e) => {
@@ -817,6 +863,15 @@ document.addEventListener('click', (e) => {
     case 'export':
       download(`alien-rpg-backup-${new Date().toISOString().slice(0, 10)}.json`, store.exportJson());
       break;
+    case 'copy-backup':
+      copyBackup();
+      break;
+    case 'paste-import': {
+      const text = document.getElementById('paste-backup').value.trim();
+      if (text) runImport(text);
+      else toast('Erst Backup-Text einfügen');
+      break;
+    }
     default:
   }
 });
@@ -848,13 +903,7 @@ document.addEventListener('change', async (e) => {
     store.update(el.dataset.id, (c) => { c[el.dataset.inline] = el.value; });
     toast('Gespeichert');
   } else if (el.dataset.act === 'import' && el.files?.[0]) {
-    try {
-      const { added, updated, locs } = store.importJson(await el.files[0].text());
-      toast(`Import: ${added} neu, ${updated} aktualisiert${locs ? `, ${locs} Orte` : ''}`);
-      render();
-    } catch (err) {
-      alert(`Import fehlgeschlagen: ${err.message}`);
-    }
+    runImport(await el.files[0].text());
   }
 });
 
