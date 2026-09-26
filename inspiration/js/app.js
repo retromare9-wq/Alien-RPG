@@ -2,7 +2,7 @@ import { KATEGORIEN } from './listen.js';
 import { sortiereKategorien, ziehe, wuerfleAlle } from './wuerfel.js';
 
 const kategorien = sortiereKategorien(KATEGORIEN);
-const PREFIX = 'inspiration.'; // eigene Schlüssel, damit Alien Crew nichts überschreibt
+const PREFIX = 'inspiration.'; // eigene Schlüssel, damit Alien RPG nichts überschreibt
 const MAX_VERLAUF = 20;
 
 // ---------- Speicher (localStorage kann fehlen, z. B. im privaten Modus) ----------

@@ -1,4 +1,4 @@
-# Alien RPG Crew
+# Alien RPG
 
 Private Web-App (PWA) für ALIEN RPG (Evolved Edition): Charakterbögen für PCs und NPCs, Würfeln mit Basis- und Stresswürfeln, Pushen, Stress Response und eine Übersicht über Stress und Health aller Figuren.
 
@@ -10,9 +10,9 @@ Alle Daten bleiben lokal im Browser des Geräts. Backups gehen über **Daten →
 2. Die angezeigte Adresse (`https://<user>.github.io/Alien-RPG/`) in Chrome öffnen.
 3. Menü ⋮ → **Zum Startbildschirm hinzufügen** bzw. **App installieren**.
 
-## Zweite App: Inspiration
+## Zweite App: RPG INSP
 
-Im Ordner [`inspiration/`](inspiration/) liegt eine eigenständige App, die für ausgewählte Kategorien zufällige Ideen würfelt (Gegenstände, Räume, Gerüche, Graffiti, Buchtitel …). Sie ist unter `https://<user>.github.io/Alien-RPG/inspiration/` erreichbar und wird genauso installiert wie Alien Crew. Danach hat sie ein eigenes Icon.
+Im Ordner [`inspiration/`](inspiration/) liegt eine eigenständige App, die für ausgewählte Kategorien zufällige Ideen würfelt (Gegenstände, Räume, Gerüche, Graffiti, Buchtitel …). Sie ist unter `https://<user>.github.io/Alien-RPG/inspiration/` erreichbar und wird genauso installiert wie Alien RPG. Danach hat sie ein eigenes Icon.
 
 Die Listen stehen in [`inspiration/js/listen.js`](inspiration/js/listen.js). Dort kannst du einfach Einträge ergänzen oder ändern oder neue Kategorien anhängen.
 
