@@ -16,6 +16,8 @@ import {
 import {
   locationsView, filterLocations, locationView, locationEditView, saveLocationForm, deleteLocation,
 } from './places.js';
+import { xenosView, xenoView, xenoEditView, saveXenoForm, xenoAction, addXeno } from './xenoview.js';
+import { combatView, combatAction } from './combat.js';
 
 const $main = document.getElementById('main');
 export const ui = loadUi();
@@ -132,7 +134,8 @@ function listView() {
     .map(([v, l]) => `<button class="seg ${ui.filter === v ? 'active' : ''}" data-act="filter" data-v="${v}">${l}</button>`).join('');
 
   const items = list.map((c) => `
-    <a class="card list-item" href="#/c/${c.id}">
+    <div class="card list-item">
+      <a class="li-link" href="#/c/${c.id}">
       <div class="li-main">
         <div class="li-name">${esc(c.name || 'Ohne Namen')} ${typeBadge(c)}</div>
         <div class="li-sub">${esc(c.career || '—')}</div>
@@ -141,11 +144,14 @@ function listView() {
         ${c.hasStress ? `<span class="mini stress">S ${c.stress}</span>` : ''}
         <span class="mini ${c.health.current <= 0 ? 'down' : ''}">H ${c.health.current}/${c.health.max}</span>
       </div>
-    </a>`).join('');
+      </a>
+      <input class="init-input" data-init="char" data-id="${c.id}" value="${esc(c.initiative)}" inputmode="numeric" placeholder="Init" aria-label="Initiative">
+    </div>`).join('');
 
   return `
     <div class="segments">${filters}</div>
     ${items || '<p class="empty">Noch keine Charaktere. Lege unten einen an.</p>'}
+    ${items ? '<p class="hint">Init: Initiative-Zahl eintragen, dann erscheint der Charakter im Combat-Reiter.</p>' : ''}
     <div class="new-row">
       <a class="btn btn-primary" href="#/new/PC">+ Neuer PC</a>
       <a class="btn" href="#/new/NPC">+ Neuer NPC</a>
@@ -624,6 +630,10 @@ export function render() {
     case 'rules': html = rulesView(); tab = 'rules'; title = 'Regeln'; break;
     case 'equipment': html = equipmentView(); tab = 'equipment'; title = 'Equipment'; break;
     case 'item': html = itemEditView(arg); tab = 'equipment'; title = 'Item bearbeiten'; back = '#/equipment'; break;
+    case 'xenos': html = xenosView(); tab = 'xenos'; title = 'Xenos'; break;
+    case 'xeno': html = xenoView(arg); tab = 'xenos'; title = 'Xeno'; back = '#/xenos'; break;
+    case 'xeno-edit': html = xenoEditView(arg); tab = 'xenos'; title = 'Xeno bearbeiten'; back = `#/xeno/${arg}`; break;
+    case 'combat': html = combatView(); tab = 'combat'; title = 'Combat'; break;
     case 'locations': html = locationsView(); tab = 'locations'; title = 'Orte'; break;
     case 'loc': html = locationView(arg); tab = 'locations'; title = 'Ort'; back = '#/locations'; break;
     case 'loc-edit': html = locationEditView(arg); tab = 'locations'; title = 'Ort bearbeiten'; back = arg === 'new' ? '#/locations' : `#/loc/${arg}`; break;
@@ -732,6 +742,8 @@ document.addEventListener('click', (e) => {
   const { act, id } = el.dataset;
   if (act.startsWith('dlg-')) return handleRollAction(act, el);
   if (el.tagName === 'INPUT') return; // Checkboxen/Dateien laufen über 'change'
+  if (act.startsWith('xeno-') && xenoAction(act, el)) return;
+  if (act.startsWith('cb-') && combatAction(act)) return;
 
   switch (act) {
     case 'filter':
@@ -814,6 +826,19 @@ document.addEventListener('change', async (e) => {
   if (el.dataset.act === 'toggle-response') {
     store.update(el.dataset.id, (c) => { c[el.dataset.group][el.dataset.key] = el.checked; });
     render();
+  } else if (el.dataset.init) {
+    const nums = store.parseInitiative(el.value);
+    const value = el.dataset.init === 'xeno' ? nums.join(', ') : String(nums[0] ?? '');
+    if (el.dataset.init === 'xeno') store.updateXeno(el.dataset.id, (x) => { x.initiative = value; });
+    else store.update(el.dataset.id, (c) => { c.initiative = value; });
+    el.value = value;
+    toast(value ? `Initiative ${value}: im Combat` : 'Aus dem Combat entfernt');
+    if (location.hash.startsWith('#/combat')) render();
+  } else if (el.id === 'xeno-add') {
+    addXeno(el.value);
+  } else if (el.dataset.inlineXeno) {
+    store.updateXeno(el.dataset.id, (x) => { x[el.dataset.inlineXeno] = el.value; });
+    toast('Gespeichert');
   } else if (el.dataset.setting) {
     const k = el.dataset.setting;
     ui[k] = el.type === 'checkbox' ? el.checked : Math.max(0, Number(el.value) || 0);
@@ -896,6 +921,7 @@ document.addEventListener('input', (e) => {
 document.addEventListener('submit', (e) => {
   if (e.target.id === 'item-form') { e.preventDefault(); saveItemForm(e.target); return; }
   if (e.target.id === 'loc-form') { e.preventDefault(); saveLocationForm(e.target); return; }
+  if (e.target.id === 'xeno-form') { e.preventDefault(); saveXenoForm(e.target); return; }
   if (e.target.id !== 'edit-form') return;
   e.preventDefault();
   const c = store.save(readForm(e.target));

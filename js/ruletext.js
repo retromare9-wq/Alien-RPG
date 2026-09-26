@@ -30,7 +30,7 @@ export const RULES = [
         <p>Pro zusätzlicher 6 eine passende Wirkung wählen:</p>
         <ul><li>+1 Schaden (mehrfach wählbar)</li><li>du beeindruckst jemanden</li><li>es geht schneller</li><li>es geht leiser</li><li>ein unerwarteter Zusatzeffekt</li></ul>` },
       { title: 'Difficulty', html: `
-        <p>Es gibt <b>keine benannten Schwierigkeitsstufen</b> mehr. Regelbuch und Abenteuer geben situative Modifikatoren vor (z. B. Fernkampf-Tabelle), sonst legt der GM +/− Dice fest.</p>` },
+        <p>Es gibt <b>keine benannten Schwierigkeitsstufen</b> mehr. Regelbuch und Abenteuer geben situative Modifikatoren vor (z. B. Fernkampf-Tabelle), sonst legt die GM +/− Dice fest.</p>` },
       { title: 'Passive Rolls', html: `
         <p>Die GM kann Würfe verlangen, von denen du nichts weißt (meist Observation im Stealth). Sie können nicht gepusht werden und lösen keine Stress Response aus. Stress Dice kommen trotzdem dazu.</p>` },
     ],
@@ -259,7 +259,7 @@ export const RULES = [
           <li><b>Ersticken</b>: Survival jede Runde.</li>
           <li><b>Hunger & Durst</b>: nach 24 h Survival 1×/Shift.</li>
           <li><b>Schlafentzug</b>: nach 24 h Survival 1×/Shift.</li>
-          <li><b>Hitze/Kälte</b>: Intervall legt der GM fest.</li>
+          <li><b>Hitze/Kälte</b>: Intervall legt die GM fest.</li>
         </ul>
         <p>Erster Fehlschlag → <b>Fatigued</b>: keine Health-Erholung; jeder weitere Fehlschlag = 1 Schaden + Stress +1. Endet sofort, wenn die Ursache behoben ist.</p>` },
       { title: 'Radiation', html: `

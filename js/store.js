@@ -5,6 +5,7 @@ import {
 } from './rules.js';
 import { CATALOG } from './data/equipment.js';
 import { LOCATIONS_SEED } from './data/locations.js';
+import { XENO_TYPES, typeByKey } from './data/xenos.js';
 
 const KEY = 'alien-rpg-characters-v1';
 export const GEAR_ROWS = 10;
@@ -72,6 +73,7 @@ export function newCharacter(type = 'PC') {
     gear: Array.from({ length: GEAR_ROWS }, blankGear),
     notes: '',
     npc: Object.fromEntries(NPC_FIELDS.map((f) => [f.key, ''])),
+    initiative: '',
     updatedAt: Date.now(),
   };
 }
@@ -272,12 +274,96 @@ export function findItem(name, kinds = null) {
   return equipment().find((it) => it.name.toLowerCase() === n && (!kinds || kinds.includes(it.kind))) || null;
 }
 
+// ---------- Xenos ----------
+// Jeder Eintrag ist ein konkreter Xeno mit eigener Health; Beschreibung und
+// Angriffstabelle kommen aus dem Typ (data/xenos.js).
+
+const XENO_KEY = 'alien-rpg-xenos-v1';
+let xenoCache = null;
+
+export function newXeno(typeKey, name) {
+  const t = typeByKey(typeKey);
+  return {
+    id: uid(), typeKey, name: name || t.name,
+    stats: { ...t.stats }, healthCurrent: t.stats.health,
+    initiative: '', notes: '', lastAttack: null,
+  };
+}
+
+export function xenos() {
+  if (!xenoCache) {
+    let raw = null;
+    try { raw = JSON.parse(localStorage.getItem(XENO_KEY) || 'null'); } catch { raw = null; }
+    if (Array.isArray(raw)) {
+      xenoCache = raw.filter((x) => typeByKey(x.typeKey)).map((x) => ({ ...newXeno(x.typeKey), ...x }));
+    } else {
+      xenoCache = XENO_TYPES.map((t) => newXeno(t.key));
+      persistXenos();
+    }
+  }
+  return xenoCache;
+}
+
+function persistXenos() {
+  localStorage.setItem(XENO_KEY, JSON.stringify(xenoCache));
+}
+
+export const getXeno = (id) => xenos().find((x) => x.id === id);
+
+export function saveXeno(x) {
+  const list = xenos();
+  const i = list.findIndex((y) => y.id === x.id);
+  if (i >= 0) list[i] = x;
+  else list.push(x);
+  persistXenos();
+  return x;
+}
+
+export function updateXeno(id, fn) {
+  const x = getXeno(id);
+  if (!x) return null;
+  fn(x);
+  return saveXeno(x);
+}
+
+export function removeXeno(id) {
+  xenoCache = xenos().filter((x) => x.id !== id);
+  persistXenos();
+}
+
+// Weitere Instanz desselben Typs, z. B. „Facehugger 2“.
+export function copyXeno(id) {
+  const src = getXeno(id);
+  if (!src) return null;
+  const base = typeByKey(src.typeKey).name;
+  const taken = new Set(xenos().map((x) => x.name));
+  let n = 2;
+  while (taken.has(`${base} ${n}`)) n++;
+  const copy = { ...newXeno(src.typeKey, `${base} ${n}`), stats: { ...src.stats } };
+  copy.healthCurrent = copy.stats.health;
+  return saveXeno(copy);
+}
+
+// ---------- Initiative ----------
+
+// "3" → [3], "3, 8" → [3, 8]; nur Zahlen 1–99.
+export function parseInitiative(v) {
+  return String(v ?? '').split(/[,;\s]+/).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= 99);
+}
+
+export function clearInitiative() {
+  for (const c of all()) c.initiative = '';
+  persist();
+  for (const x of xenos()) x.initiative = '';
+  persistXenos();
+}
+
 // ---------- Backup ----------
 
 export function exportJson() {
   return JSON.stringify({
     app: 'alien-rpg-characters', version: 2, exportedAt: new Date().toISOString(),
-    characters: all(), locations: locations(), equipment: eqState(),
+    characters: all(), locations: locations(), equipment: eqState(), xenos: xenos(),
   }, null, 2);
 }
 
@@ -290,6 +376,9 @@ export function importJson(text) {
   if (Array.isArray(data.locations)) {
     for (const l of data.locations) saveLocation({ ...blankLocation(), ...l });
     locs = data.locations.length;
+  }
+  if (Array.isArray(data.xenos)) {
+    for (const x of data.xenos) if (typeByKey(x.typeKey)) saveXeno({ ...newXeno(x.typeKey), ...x });
   }
   if (data.equipment && typeof data.equipment === 'object') {
     const st = eqState();
