@@ -19,7 +19,7 @@ self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
 
-// Nur die eigenen alten Caches löschen – nicht die von Alien Crew (gleiche Adresse).
+// Nur die eigenen alten Caches löschen – nicht die von Alien RPG (gleiche Adresse).
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
