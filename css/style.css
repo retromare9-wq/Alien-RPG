@@ -212,6 +212,8 @@ legend { font: 700 .85rem var(--mono); color: var(--accent); text-transform: upp
 .attr-edit { grid-template-columns: 1fr 1fr; }
 .form-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
 .file-btn { margin-top: 10px; }
+.paste-import summary { cursor: pointer; color: var(--muted); font-size: .9rem; padding: 6px 0; }
+.paste-import[open] { display: grid; gap: 8px; }
 .rules { padding-left: 18px; margin: 0; color: var(--muted); font-size: .9rem; }
 .rules li { margin-bottom: 6px; }
 
