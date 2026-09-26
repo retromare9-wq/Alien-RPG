@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1412">
+  <meta name="description" content="Zufällige Ideen für ALIEN RPG: Gegenstände, Räume, Gerüche, Graffiti und mehr.">
+  <title>Inspiration</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Inspiration</h1>
+  </header>
+
+  <main>
+    <div id="ergebnis" aria-live="polite"></div>
+
+    <h2>Kategorien</h2>
+    <div class="auswahl-knoepfe">
+      <button id="alle" class="btn btn-small" type="button">Alle</button>
+      <button id="keine" class="btn btn-small" type="button">Keine</button>
+    </div>
+    <div id="kategorien" class="kat-gitter"></div>
+
+    <h2>Werte pro Kategorie</h2>
+    <div class="segments">
+      <button class="seg" type="button" data-anzahl="1">1</button>
+      <button class="seg" type="button" data-anzahl="2">2</button>
+      <button class="seg" type="button" data-anzahl="3">3</button>
+    </div>
+
+    <details class="card sec">
+      <summary>Verlauf <span id="verlauf-zahl" class="badge">0</span></summary>
+      <div id="verlauf-liste" class="sec-body"></div>
+    </details>
+  </main>
+
+  <div class="wurfleiste">
+    <button id="wuerfeln" class="btn btn-primary big wide" type="button">Würfeln</button>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

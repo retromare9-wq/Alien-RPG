@@ -10,6 +10,12 @@ Alle Daten bleiben lokal im Browser des Geräts. Backups gehen über **Daten →
 2. Die angezeigte Adresse (`https://<user>.github.io/Alien-RPG/`) in Chrome öffnen.
 3. Menü ⋮ → **Zum Startbildschirm hinzufügen** bzw. **App installieren**.
 
+## Zweite App: Inspiration
+
+Im Ordner [`inspiration/`](inspiration/) liegt eine eigenständige App, die für ausgewählte Kategorien zufällige Ideen würfelt (Gegenstände, Räume, Gerüche, Graffiti, Buchtitel …). Sie ist unter `https://<user>.github.io/Alien-RPG/inspiration/` erreichbar und wird genauso installiert wie Alien Crew. Danach hat sie ein eigenes Icon.
+
+Die Listen stehen in [`inspiration/js/listen.js`](inspiration/js/listen.js). Dort kannst du einfach Einträge ergänzen oder ändern oder neue Kategorien anhängen.
+
 ## Lokal starten
 
 ```sh
