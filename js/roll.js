@@ -70,15 +70,15 @@ function setupHtml(c) {
     </div>
     <div class="pool">
       <div class="pool-col">
-        <span class="pool-label">Basiswürfel</span>
+        <span class="pool-label">Base Dice</span>
         <div class="stepper compact">
-          <button class="btn-round" data-act="dlg-base" data-d="-1" ${base <= 1 ? 'disabled' : ''} aria-label="Basiswürfel verringern">−</button>
+          <button class="btn-round" data-act="dlg-base" data-d="-1" ${base <= 1 ? 'disabled' : ''} aria-label="Base Dice verringern">−</button>
           <span class="pool-num base">${base}</span>
-          <button class="btn-round" data-act="dlg-base" data-d="1" aria-label="Basiswürfel erhöhen">+</button>
+          <button class="btn-round" data-act="dlg-base" data-d="1" aria-label="Base Dice erhöhen">+</button>
         </div>
       </div>
       <div class="pool-col">
-        <span class="pool-label">Stresswürfel</span>
+        <span class="pool-label">Stress Dice</span>
         <span class="pool-num stress">${stress}</span>
       </div>
       <div class="pool-col">
@@ -86,7 +86,7 @@ function setupHtml(c) {
         <span class="pool-num total">${base + stress}</span>
       </div>
     </div>
-    ${c.hasStress ? '' : '<p class="hint">NPC ohne Stress Level: keine Stresswürfel, kein Pushen.</p>'}
+    ${c.hasStress ? '' : '<p class="hint">NPCs haben kein Stress Level: keine Stress Dice, kein Push.</p>'}
     <div class="dlg-actions">
       <button class="btn btn-primary wide big" data-act="dlg-roll">🎲 Würfeln</button>
       <button class="btn wide" data-act="dlg-close">Abbrechen</button>
@@ -102,21 +102,21 @@ function resultHtml(c) {
 
   let headline;
   if (fails) headline = '<div class="verdict fail">MESS UP<small>Die Aktion scheitert</small></div>';
-  else if (successes) headline = `<div class="verdict ok">${successes} ${successes === 1 ? 'Erfolg' : 'Erfolge'}</div>`;
-  else headline = '<div class="verdict fail">Kein Erfolg</div>';
+  else if (successes) headline = `<div class="verdict ok">${successes} ${successes === 1 ? 'Success' : 'Successes'}</div>`;
+  else headline = '<div class="verdict fail">Failure</div>';
 
   const info = [];
-  if (s.pushed) info.push(`Gepusht: Stress ${signed(s.pushGain)} → ${s.stressAfterPush}.`);
-  if (ones) info.push(`<b class="bane-text">☣ ${ones}× 1 auf ${ones === 1 ? 'Stresswürfel' : 'Stresswürfeln'}: Stress Response!</b>`);
-  else if (c.hasStress) info.push('Keine 1 auf Stresswürfeln.');
+  if (s.pushed) info.push(`Pushed: Stress ${signed(s.pushGain)} → ${s.stressAfterPush}.`);
+  if (ones) info.push(`<b class="bane-text">☣ ${ones}× 1 auf ${ones === 1 ? 'Stress Die' : 'Stress Dice'}: Stress Response!</b>`);
+  else if (c.hasStress) info.push('Keine 1 auf den Stress Dice.');
 
   let actions = '';
   if (ones && !s.response) {
     actions += `<button class="btn btn-danger wide big" data-act="dlg-response">Stress Response würfeln<small>D6 + Stress ${c.stress} − Resolve ${c.resolve}</small></button>`;
   } else if (canPush && gain > 0) {
-    actions += `<button class="btn btn-warn wide big" data-act="dlg-push">Pushen<small>Stress ${signed(gain)} (${c.stress} → ${c.stress + gain}), ${gain} ${gain === 1 ? 'Stresswürfel' : 'Stresswürfel'} mehr, Würfel ohne 6 neu würfeln</small></button>`;
+    actions += `<button class="btn btn-warn wide big" data-act="dlg-push">Push<small>Stress ${signed(gain)} (${c.stress} → ${c.stress + gain}), +${gain} ${gain === 1 ? 'Stress Die' : 'Stress Dice'}, alle Dice ohne 6 neu würfeln</small></button>`;
   } else if (!s.pushed && !ones && c.hasStress) {
-    const why = c.responses.deflated ? 'Deflated: Pushen nicht möglich.' : gain <= 0 ? 'Stress Level ist bereits auf dem Maximum.' : '';
+    const why = c.responses.deflated ? 'Deflated: kein Push möglich.' : gain <= 0 ? 'Stress Level ist bereits auf dem Maximum.' : '';
     if (why) info.push(why);
   } else if (!c.hasStress) {
     info.push('NPCs pushen nie.');

@@ -31,18 +31,18 @@ export const skillByKey = (key) => SKILLS.find((s) => s.key === key);
 export const attrByKey = (key) => ATTRIBUTES.find((a) => a.key === key);
 
 // Stress-Response-Tabelle (D6 + Stress Level − Resolve).
-// `penaltyAttr`: Skill-Würfe auf diesem Attribut bekommen −2 Würfel.
+// `penaltyAttr`: Skill-Würfe auf diesem Attribut bekommen −2 Dice.
 export const STRESS_RESPONSES = [
   { key: 'jumpy', label: 'Jumpy', result: 1, effect: 'Beim Pushen +2 Stress statt +1.' },
-  { key: 'tunnelVision', label: 'Tunnel Vision', result: 2, penaltyAttr: 'wits', effect: 'Alle Skill-Würfe auf Wits −2 Würfel.' },
-  { key: 'aggravated', label: 'Aggravated', result: 3, penaltyAttr: 'empathy', effect: 'Alle Skill-Würfe auf Empathy −2 Würfel.' },
-  { key: 'shakes', label: 'Shakes', result: 4, penaltyAttr: 'agility', effect: 'Alle Skill-Würfe auf Agility −2 Würfel.' },
-  { key: 'frantic', label: 'Frantic', result: 5, penaltyAttr: 'strength', effect: 'Alle Skill-Würfe auf Strength −2 Würfel.' },
+  { key: 'tunnelVision', label: 'Tunnel Vision', result: 2, penaltyAttr: 'wits', effect: 'Alle Skill-Würfe auf Wits −2 Dice.' },
+  { key: 'aggravated', label: 'Aggravated', result: 3, penaltyAttr: 'empathy', effect: 'Alle Skill-Würfe auf Empathy −2 Dice.' },
+  { key: 'shakes', label: 'Shakes', result: 4, penaltyAttr: 'agility', effect: 'Alle Skill-Würfe auf Agility −2 Dice.' },
+  { key: 'frantic', label: 'Frantic', result: 5, penaltyAttr: 'strength', effect: 'Alle Skill-Würfe auf Strength −2 Dice.' },
   { key: 'deflated', label: 'Deflated', result: 6, effect: 'Kann keine Würfe pushen. Entfernt Jumpy; weitere Jumpy-Ergebnisse werden ignoriert.' },
 ];
 
 export const KEEPING_COOL = { key: 'keepingCool', label: 'Keeping Cool', effect: 'Keine Auswirkung.' };
-export const MESS_UP = { key: 'messUp', label: 'Mess Up', effect: 'Die Aktion scheitert unabhängig von den Erfolgen, +1 Stress.' };
+export const MESS_UP = { key: 'messUp', label: 'Mess Up', effect: 'Die Aktion scheitert unabhängig von den Successes, +1 Stress.' };
 
 // Panik-Reaktionen vom Charakterbogen (nur zum Abhaken).
 export const PANIC_RESPONSES = [
@@ -89,7 +89,7 @@ export function rollPool(baseCount, stressCount, rng = Math.random) {
 export const countSuccesses = (dice) => dice.filter((d) => d.value === 6).length;
 export const countStressOnes = (dice) => dice.filter((d) => d.type === 'stress' && d.value === 1).length;
 
-// Pushen: alle Würfel ohne 6 neu würfeln, plus `extraStress` neue Stresswürfel.
+// Pushen: alle Würfel ohne 6 neu würfeln, plus `extraStress` neue Stress Dice.
 export function pushPool(dice, extraStress, rng = Math.random) {
   const rerolled = dice.map((d) => (d.value === 6 ? { ...d, rerolled: false } : { ...d, value: d6(rng), rerolled: true }));
   for (let i = 0; i < extraStress; i++) rerolled.push({ type: 'stress', value: d6(rng), rerolled: true, added: true });
@@ -179,14 +179,14 @@ export function pointWarnings(c, attrBudget = DEFAULT_ATTRIBUTE_POINTS, skillBud
     if (used < budget) out.push(`${label}: ${used} von ${budget} Punkten verteilt, ${budget - used} ${budget - used === 1 ? 'fehlt' : 'fehlen'}.`);
     else if (used > budget) out.push(`${label}: ${used} von ${budget} Punkten verteilt, ${used - budget} zu viel.`);
   };
-  check('Attribute', ATTRIBUTES.reduce((s, a) => s + (Number(c.attributes[a.key]) || 0), 0), attrBudget);
+  check('Attributes', ATTRIBUTES.reduce((s, a) => s + (Number(c.attributes[a.key]) || 0), 0), attrBudget);
   check('Skills', SKILLS.reduce((s, k) => s + (Number(c.skills[k.key]) || 0), 0), skillBudget);
   return out;
 }
 
 // ---------- Stärkste Würfe ----------
 
-// Die n Würfe mit den meisten Basiswürfeln. Skills ohne Stufe zählen nicht
+// Die n Würfe mit den meisten Base Dice. Skills ohne Stufe zählen nicht
 // (da würfelt man einfach das Attribut); bei Gleichstand gewinnt der Skill.
 export function strongestRolls(c, n = 2) {
   const options = [
@@ -217,9 +217,9 @@ export const PANIC_ENDS = 'Panik endet, wenn jemand in Hör-/Funkreichweite eine
 export const PANIC_TABLE = [
   { key: 'keepingCool', label: 'Keeping Cool', min: -99, max: 0, effect: 'Keine Wirkung.', duration: '—' },
   { key: 'spooked', label: 'Spooked', min: 1, max: 1, stressDelta: 1, effect: 'Stress Level +1.', duration: 'Sofort' },
-  { key: 'noisy', label: 'Noisy', min: 2, max: 2, effect: 'Gegner in der Nähe bemerken dich automatisch (SL entscheidet, wer).', duration: 'Sofort' },
-  { key: 'twitchy', label: 'Twitchy', min: 3, max: 3, effect: 'Sofort Supply Roll für Luft, Munition oder Energie (SL wählt).', duration: 'Sofort' },
-  { key: 'loseItem', label: 'Lose Item', min: 4, max: 4, effect: 'Waffe oder wichtiger Gegenstand weg (SL wählt). Im Kampf per Quick Action aufheben, sonst Observation-Wurf und Zeit.', duration: 'Sofort' },
+  { key: 'noisy', label: 'Noisy', min: 2, max: 2, effect: 'Gegner in der Nähe bemerken dich automatisch (GM entscheidet, wer).', duration: 'Sofort' },
+  { key: 'twitchy', label: 'Twitchy', min: 3, max: 3, effect: 'Sofort Supply Roll für Luft, Munition oder Energie (GM wählt).', duration: 'Sofort' },
+  { key: 'loseItem', label: 'Lose Item', min: 4, max: 4, effect: 'Waffe oder wichtiger Gegenstand weg (GM wählt). Im Kampf per Quick Action aufheben, sonst Observation-Wurf und Zeit.', duration: 'Sofort' },
   { key: 'paranoid', label: 'Paranoid', min: 5, max: 5, track: true, effect: 'Du kannst bei Würfen weder helfen noch Hilfe annehmen.', duration: 'Bis die Panik endet' },
   { key: 'hesitant', label: 'Hesitant', min: 6, max: 6, track: true, effect: 'Du bekommst automatisch Initiative 10.', duration: 'Bis die Panik endet' },
   { key: 'freeze', label: 'Freeze', min: 7, max: 7, track: true, effect: 'Du verlierst deinen nächsten Zug, bis dahin keine Interrupt-Aktionen.', duration: 'Bis zum Ende deines nächsten Zuges' },

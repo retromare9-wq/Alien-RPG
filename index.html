@@ -15,18 +15,21 @@
   <header class="topbar">
     <a id="back" class="icon-btn" href="#/" hidden aria-label="Zurück">‹</a>
     <h1 id="title">Crew</h1>
+    <a id="data-link" class="icon-btn" href="#/data" aria-label="Daten & Backup">⚙</a>
   </header>
 
   <main id="main"></main>
 
   <nav class="tabbar">
-    <a href="#/" data-tab="list">Charaktere</a>
+    <a href="#/" data-tab="list">Crew</a>
     <a href="#/overview" data-tab="overview">Übersicht</a>
+    <a href="#/equipment" data-tab="equipment">Equipment</a>
+    <a href="#/locations" data-tab="locations">Orte</a>
     <a href="#/rules" data-tab="rules">Regeln</a>
-    <a href="#/data" data-tab="data">Daten</a>
   </nav>
 
   <dialog id="roll-dialog"></dialog>
+  <dialog id="pick-dialog"></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
 
   <script type="module" src="js/app.js"></script>

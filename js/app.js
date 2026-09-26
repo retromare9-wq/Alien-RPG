@@ -6,11 +6,19 @@ import {
   resolveStressResponse, resolvePanic, STRESS_DURATION, PANIC_ENDS,
 } from './rules.js';
 import * as store from './store.js';
+import { NPC_FIELDS } from './store.js';
 import { openRoll, handleRollAction } from './roll.js';
 import { RULES } from './ruletext.js';
+import {
+  equipmentView, filterEquipment, randomPick, openAssign, closePick, assignItem,
+  itemEditView, saveItemForm, resetItem, equipmentDatalists, fillWeapon, fillArmor, fillGear,
+} from './catalog.js';
+import {
+  locationsView, filterLocations, locationView, locationEditView, saveLocationForm, deleteLocation,
+} from './places.js';
 
 const $main = document.getElementById('main');
-const ui = loadUi();
+export const ui = loadUi();
 
 const settings = () => ({
   checkPoints: ui.checkPoints ?? true,
@@ -24,7 +32,7 @@ export function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 }
 
-const nl2br = (v) => esc(v).replace(/\n/g, '<br>');
+export const nl2br = (v) => esc(v).replace(/\n/g, '<br>');
 
 function loadUi() {
   try {
@@ -34,7 +42,7 @@ function loadUi() {
   }
 }
 
-function saveUi() {
+export function saveUi() {
   try {
     localStorage.setItem('alien-rpg-ui', JSON.stringify(ui));
   } catch { /* egal */ }
@@ -48,7 +56,7 @@ export function toast(msg) {
   toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-function section(key, title, body, { open = false, badge = '' } = {}) {
+export function section(key, title, body, { open = false, badge = '' } = {}) {
   const isOpen = ui.open[key] ?? open;
   return `<details class="card sec" data-sec="${key}" ${isOpen ? 'open' : ''}>
     <summary><span>${title}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</summary>
@@ -81,7 +89,7 @@ function activeResponseChips(c) {
     ...PANIC_RESPONSES.filter((r) => c.panic[r.key]).map((r) => `<span class="chip chip-panic">${r.label}</span>`),
   ];
   if (c.fatigued) chips.unshift('<span class="chip chip-warn">Fatigued</span>');
-  if (c.encumbrance.max !== '' && encumbrance(c) > Number(c.encumbrance.max)) chips.unshift('<span class="chip chip-warn">Überladen</span>');
+  if (c.type === 'PC' && c.encumbrance.max !== '' && encumbrance(c) > Number(c.encumbrance.max)) chips.unshift('<span class="chip chip-warn">Over-encumbered</span>');
   if (c.health.current <= 0) chips.unshift('<span class="chip chip-warn">Broken</span>');
   return chips.join('');
 }
@@ -90,7 +98,7 @@ function encHtml(c) {
   const cur = encumbrance(c);
   const max = Number(c.encumbrance.max);
   const over = c.encumbrance.max !== '' && cur > max;
-  return `<span class="enc ${over ? 'over' : ''}">${cur} / ${esc(c.encumbrance.max) || '—'}${over ? ' · überladen' : ''}</span>`;
+  return `<span class="enc ${over ? 'over' : ''}">${cur} / ${esc(c.encumbrance.max) || '—'}${over ? ' · over-encumbered' : ''}</span>`;
 }
 
 function pointsHint(c) {
@@ -105,10 +113,10 @@ const lastRollHtml = (c) => {
   if (!r) return '';
   return `<div class="last-roll ${r.kind}">
     <div class="lr-head">
-      <span class="lr-kind">${r.kind === 'panic' ? 'Panikwurf' : 'Stress Response'}</span>
+      <span class="lr-kind">${r.kind === 'panic' ? 'Panic Roll' : 'Stress Response'}</span>
       <button class="icon-btn small" data-act="clear-last" data-id="${c.id}" aria-label="Ergebnis ausblenden">✕</button>
     </div>
-    <div class="resp-calc">W6 <b>${r.die}</b> + Stress <b>${r.stress}</b> − Resolve <b>${r.resolve}</b> = <b>${r.total}</b></div>
+    <div class="resp-calc">D6 <b>${r.die}</b> + Stress <b>${r.stress}</b> − Resolve <b>${r.resolve}</b> = <b>${r.total}</b></div>
     <div class="resp-name">${esc(r.label)}</div>
     <p>${esc(r.effect)}</p>
     ${r.note ? `<p class="hint">${esc(r.note)}</p>` : ''}
@@ -144,45 +152,22 @@ function listView() {
     </div>`;
 }
 
-function sheetView(id) {
-  const c = store.get(id);
-  if (!c) return notFound();
-
-  const status = `
-    <div class="card status">
-      ${c.hasStress ? `
-        <div class="status-head"><span class="label">Stress Level</span>
-          <span class="stepper compact">
-            <button class="btn-round" data-act="stat" data-id="${id}" data-field="stress" data-d="-1" aria-label="Stress verringern">−</button>
-            <span class="stepper-value big">${c.stress}</span>
-            <button class="btn-round" data-act="stat" data-id="${id}" data-field="stress" data-d="1" aria-label="Stress erhöhen">+</button>
-          </span>
-        </div>
-        ${stressBoxes(c)}` : '<p class="hint">Kein Stress Level (NPC). Würfe ohne Stresswürfel, kein Pushen.</p>'}
-      <div class="status-grid">
-        ${stepper(id, 'health', c.health.current, 'Health', `<small>/${c.health.max}</small>`)}
-        ${stepper(id, 'radiation', c.radiation, 'Radiation')}
-        <div class="stepper static"><span class="stepper-label">Resolve</span><span class="stepper-value">${c.resolve}</span></div>
-        <button class="toggle ${c.fatigued ? 'on' : ''}" data-act="toggle-fatigued" data-id="${id}">Fatigued</button>
-      </div>
-      <div class="chips">${activeResponseChips(c)}</div>
-    </div>`;
-
-  const attrs = ATTRIBUTES.map((a) => {
+function attributesHtml(c) {
+  return ATTRIBUTES.map((a) => {
     const av = c.attributes[a.key];
     const pen = responsePenalties(c.responses, a.key).reduce((s, p) => s + p.value, 0);
     const penTag = pen ? `<span class="pen">${pen}</span>` : '';
     const skills = skillsFor(a.key).map((s) => {
       const sv = c.skills[s.key];
       const total = Math.max(1, av + sv + pen);
-      return `<button class="skill-row" data-act="roll" data-id="${id}" data-attr="${a.key}" data-skill="${s.key}">
+      return `<button class="skill-row" data-act="roll" data-id="${c.id}" data-attr="${a.key}" data-skill="${s.key}">
         <span class="skill-name">${s.label}</span>
         <span class="skill-val">${sv}</span>
         <span class="dice-count">${total}${penTag}<i class="dicon"></i></span>
       </button>`;
     }).join('');
     return `<div class="attr">
-      <button class="attr-head" data-act="roll" data-id="${id}" data-attr="${a.key}">
+      <button class="attr-head" data-act="roll" data-id="${c.id}" data-attr="${a.key}">
         <span class="attr-name">${a.label}</span>
         <span class="attr-val">${av}</span>
         <span class="dice-count">${Math.max(1, av + pen)}${penTag}<i class="dicon"></i></span>
@@ -190,20 +175,17 @@ function sheetView(id) {
       ${skills}
     </div>`;
   }).join('');
+}
 
-  const respList = (group, list) => list.map((r) => `
-    <label class="check">
-      <input type="checkbox" data-act="toggle-response" data-id="${id}" data-group="${group}" data-key="${r.key}" ${c[group][r.key] ? 'checked' : ''}>
-      <span><b>${r.label}</b>${r.effect ? `<small>${esc(r.effect)}</small>` : ''}</span>
-    </label>`).join('');
-
+function weaponsHtml(c) {
   const weapons = c.weapons.filter((w) => w.name.trim());
-  const weaponHtml = weapons.length ? weapons.map((w) => {
+  if (!weapons.length) return '<p class="hint">Keine Weapons eingetragen.</p>';
+  return weapons.map((w) => {
     const idx = c.weapons.indexOf(w);
     const sk = skillByKey(w.skill);
     return `<div class="item">
       <div class="item-head"><b>${esc(w.name)}</b>
-        ${sk ? `<button class="btn btn-small" data-act="roll" data-id="${id}" data-attr="${sk.attr}" data-skill="${sk.key}" data-weapon="${idx}">🎲 ${sk.label}</button>` : ''}
+        ${sk ? `<button class="btn btn-small" data-act="roll" data-id="${c.id}" data-attr="${sk.attr}" data-skill="${sk.key}" data-weapon="${idx}">🎲 ${sk.label}</button>` : ''}
       </div>
       <dl class="kv">
         <dt>Modifier</dt><dd>${w.modifier > 0 ? '+' : ''}${esc(w.modifier)}</dd>
@@ -213,19 +195,93 @@ function sheetView(id) {
         <dt>Weight</dt><dd>${esc(w.weight) || '—'}</dd>
       </dl>
     </div>`;
-  }).join('') : '<p class="hint">Keine Waffen eingetragen.</p>';
+  }).join('');
+}
 
+function gearListHtml(c) {
   const gear = c.gear.filter((g) => g.name.trim());
+  return gear.length
+    ? `<ul class="gear">${gear.map((g) => `<li><span>${esc(g.name)}</span><small>${g.airPower ? `Air/Power ${esc(g.airPower)}` : ''}${g.weight ? ` · ${esc(g.weight)}` : ''}</small></li>`).join('')}</ul>`
+    : '<p class="hint">Kein Gear eingetragen.</p>';
+}
+
+const armorText = (c) => `${esc(c.armor.name) || '—'}${c.armor.level !== '' ? ` · Armor Level ${esc(c.armor.level)}` : ''}${c.armor.weight !== '' ? ` · Weight ${esc(c.armor.weight)}` : ''}`;
+
+function sheetHead(c) {
+  return `<div class="sheet-head">
+      <div>
+        <h2>${esc(c.name || 'Ohne Namen')} ${typeBadge(c)}</h2>
+        <div class="li-sub">${esc(c.career || '')}</div>
+      </div>
+      <a class="btn btn-small" href="#/edit/${c.id}">Bearbeiten</a>
+    </div>`;
+}
+
+function npcSheet(c) {
+  const id = c.id;
+  const profile = NPC_FIELDS.map((f) => `<dt>${f.label}</dt><dd>${nl2br(c.npc[f.key]) || '—'}</dd>`).join('');
+  return `
+    ${sheetHead(c)}
+    <div class="card status">
+      <div class="status-grid">
+        ${stepper(id, 'health', c.health.current, 'Health', `<small>/${c.health.max}</small>`)}
+        <div class="stepper static"><span class="stepper-label">Armor Level</span><span class="stepper-value">${esc(c.armor.level) || '—'}</span></div>
+      </div>
+      <div class="chips">${activeResponseChips(c)}</div>
+    </div>
+    ${section('npc-skills', 'Attributes & Skills', `<p class="hint">Tippe auf ein Attribute oder einen Skill, um zu würfeln (NPCs: keine Stress Dice, kein Push).</p><div class="attrs">${attributesHtml(c)}</div>`, { open: true })}
+    ${section('npc-profile', 'Persönlichkeit', `<dl class="kv kv-stack">${profile}</dl>`, { open: true })}
+    ${section('npc-talents', 'Talents', `<p>${nl2br(c.talents) || '—'}</p>`)}
+    ${section('npc-gear', 'Armor, Weapons & Gear', `
+      <dl class="kv"><dt>Armor</dt><dd>${armorText(c)}</dd></dl>
+      <h4>Weapons</h4>${weaponsHtml(c)}
+      <h4>Gear</h4>${gearListHtml(c)}`)}
+    ${section('notes', 'Notizen',
+      `<textarea class="inline" rows="5" data-inline="notes" data-id="${id}" placeholder="Notizen …">${esc(c.notes)}</textarea>`)}
+  `;
+}
+
+function sheetView(id) {
+  const c = store.get(id);
+  if (!c) return notFound();
+  if (c.type === 'NPC') return npcSheet(c);
+
+  const status = `
+    <div class="card status">
+      <div class="status-head"><span class="label">Stress Level</span>
+        <span class="stepper compact">
+          <button class="btn-round" data-act="stat" data-id="${id}" data-field="stress" data-d="-1" aria-label="Stress verringern">−</button>
+          <span class="stepper-value big">${c.stress}</span>
+          <button class="btn-round" data-act="stat" data-id="${id}" data-field="stress" data-d="1" aria-label="Stress erhöhen">+</button>
+        </span>
+      </div>
+      ${stressBoxes(c)}
+      <div class="status-grid">
+        ${stepper(id, 'health', c.health.current, 'Health', `<small>/${c.health.max}</small>`)}
+        ${stepper(id, 'radiation', c.radiation, 'Radiation')}
+        <div class="stepper static"><span class="stepper-label">Resolve</span><span class="stepper-value">${c.resolve}</span></div>
+        <button class="toggle ${c.fatigued ? 'on' : ''}" data-act="toggle-fatigued" data-id="${id}">Fatigued</button>
+      </div>
+      <div class="chips">${activeResponseChips(c)}</div>
+    </div>`;
+
+  const respList = (group, list) => list.map((r) => `
+    <label class="check">
+      <input type="checkbox" data-act="toggle-response" data-id="${id}" data-group="${group}" data-key="${r.key}" ${c[group][r.key] ? 'checked' : ''}>
+      <span><b>${r.label}</b>${r.effect ? `<small>${esc(r.effect)}</small>` : ''}</span>
+    </label>`).join('');
+
+  const weaponCount = c.weapons.filter((w) => w.name.trim()).length;
   const gearHtml = `
     <dl class="kv">
-      <dt>Armor</dt><dd>${esc(c.armor.name) || '—'}${c.armor.level !== '' ? ` · Level ${esc(c.armor.level)}` : ''}${c.armor.weight !== '' ? ` · Weight ${esc(c.armor.weight)}` : ''}</dd>
+      <dt>Armor</dt><dd>${armorText(c)}</dd>
       <dt>Encumbrance</dt><dd>${encHtml(c)}</dd>
       <dt>Cash</dt><dd>${esc(c.cash) || '—'}</dd>
       <dt>Signature Item</dt><dd>${esc(c.signatureItem) || '—'}</dd>
       <dt>Tiny Items</dt><dd>${nl2br(c.tinyItems) || '—'}</dd>
     </dl>
     <h4>Gear</h4>
-    ${gear.length ? `<ul class="gear">${gear.map((g) => `<li><span>${esc(g.name)}</span><small>${g.airPower ? `Air/Power ${esc(g.airPower)}` : ''}${g.weight ? ` · ${esc(g.weight)}` : ''}</small></li>`).join('')}</ul>` : '<p class="hint">Keine Ausrüstung eingetragen.</p>'}`;
+    ${gearListHtml(c)}`;
 
   const personal = `
     <dl class="kv">
@@ -234,30 +290,24 @@ function sheetView(id) {
       <dt>Buddy</dt><dd>${esc(c.buddy) || '—'}</dd>
       <dt>Rival</dt><dd>${esc(c.rival) || '—'}</dd>
       <dt>Talents</dt><dd>${nl2br(c.talents) || '—'}</dd>
-      <dt>Experience</dt><dd>${esc(c.xp)}</dd>
+      <dt>Experience Points</dt><dd>${esc(c.xp)}</dd>
       <dt>Story Points</dt><dd>${esc(c.storyPoints)}</dd>
     </dl>`;
 
   const activeCount = STRESS_RESPONSES.filter((r) => c.responses[r.key]).length + PANIC_RESPONSES.filter((r) => c.panic[r.key]).length;
 
   return `
-    <div class="sheet-head">
-      <div>
-        <h2>${esc(c.name || 'Ohne Namen')} ${typeBadge(c)}</h2>
-        <div class="li-sub">${esc(c.career || '')}</div>
-      </div>
-      <a class="btn btn-small" href="#/edit/${id}">Bearbeiten</a>
-    </div>
+    ${sheetHead(c)}
     ${status}
-    ${section('skills', 'Attribute & Skills', `${pointsHint(c)}<p class="hint">Tippe auf ein Attribut oder einen Skill, um zu würfeln.</p><div class="attrs">${attrs}</div>`, { open: true })}
+    ${section('skills', 'Attributes & Skills', `${pointsHint(c)}<p class="hint">Tippe auf ein Attribute oder einen Skill, um zu würfeln.</p><div class="attrs">${attributesHtml(c)}</div>`, { open: true })}
     ${section('responses', 'Stress & Panic Responses',
-      `${c.hasStress ? `<h4>Stress Responses</h4>${respList('responses', STRESS_RESPONSES)}` : ''}<h4>Panic Responses</h4>${respList('panic', PANIC_RESPONSES)}`,
+      `<h4>Stress Responses</h4>${respList('responses', STRESS_RESPONSES)}<h4>Panic Responses</h4>${respList('panic', PANIC_RESPONSES)}`,
       { badge: activeCount || '' })}
     ${section('injuries', 'Critical Injuries & Mental Trauma',
-      `<textarea class="inline" rows="4" data-inline="injuries" data-id="${id}" placeholder="Verletzungen, Traumata …">${esc(c.injuries)}</textarea>`)}
-    ${section('weapons', 'Weapons', weaponHtml, { badge: weapons.length || '' })}
+      `<textarea class="inline" rows="4" data-inline="injuries" data-id="${id}" placeholder="Critical Injuries, Mental Trauma …">${esc(c.injuries)}</textarea>`)}
+    ${section('weapons', 'Weapons', weaponsHtml(c), { badge: weaponCount || '' })}
     ${section('gear', 'Armor, Gear & Items', gearHtml)}
-    ${section('personal', 'Persönliches & Talente', personal)}
+    ${section('personal', 'Personal Agenda & Talents', personal)}
     ${section('notes', 'Notizen',
       `<textarea class="inline" rows="5" data-inline="notes" data-id="${id}" placeholder="Notizen …">${esc(c.notes)}</textarea>`)}
   `;
@@ -268,20 +318,47 @@ function overviewView() {
   const filters = [['all', 'Alle'], ['PC', 'PCs'], ['NPC', 'NPCs']]
     .map(([v, l]) => `<button class="seg ${ui.filter === v ? 'active' : ''}" data-act="filter" data-v="${v}">${l}</button>`).join('');
 
+  const healthCell = (c) => `<div class="ov-cell">
+      <span class="stepper-label">Health</span>
+      <span class="stepper compact">
+        <button class="btn-round" data-act="stat" data-id="${c.id}" data-field="health" data-d="-1" aria-label="Health verringern">−</button>
+        <span class="stepper-value">${c.health.current}<small>/${c.health.max}</small></span>
+        <button class="btn-round" data-act="stat" data-id="${c.id}" data-field="health" data-d="1" aria-label="Health erhöhen">+</button>
+      </span>
+      <div class="meter health"><div style="width:${c.health.max ? clamp(c.health.current / c.health.max, 0, 1) * 100 : 0}%"></div></div>
+    </div>`;
+
   const rows = list.map((c) => {
     const broken = c.health.current <= 0;
     const top = strongestRolls(c, 2).map((o) => `
       <button class="top-roll" data-act="roll" data-id="${c.id}" data-attr="${o.attr}" ${o.skill ? `data-skill="${o.skill}"` : ''}>
         <span>${o.label}</span><span class="dice-count">${o.dice}<i class="dicon"></i></span>
       </button>`).join('');
+    const head = `<div class="ov-head">
+        <a href="#/c/${c.id}" class="ov-name">${esc(c.name || 'Ohne Namen')}</a>${typeBadge(c)}
+      </div>
+      ${c.career ? `<div class="li-sub ov-career">${esc(c.career)}</div>` : ''}`;
+
+    if (c.type === 'NPC') {
+      return `
+      <div class="card ov ${broken ? 'is-down' : ''}">
+        ${head}
+        <div class="ov-grid">
+          ${healthCell(c)}
+          <div class="ov-cell"><span class="stepper-label">Armor Level</span><span class="stepper-value">${esc(c.armor.level) || '—'}</span><small class="muted">${esc(c.armor.name)}</small></div>
+        </div>
+        <div class="top-rolls">${top}</div>
+        ${c.npc.temperament ? `<p class="ov-temper"><b>Temperament:</b> ${esc(c.npc.temperament)}</p>` : ''}
+        <div class="chips">${activeResponseChips(c)}</div>
+      </div>`;
+    }
+
     const anyPanic = PANIC_RESPONSES.some((r) => c.panic[r.key]);
     return `
     <div class="card ov ${broken ? 'is-down' : ''}">
-      <div class="ov-head">
-        <a href="#/c/${c.id}" class="ov-name">${esc(c.name || 'Ohne Namen')}</a>${typeBadge(c)}
-      </div>
+      ${head}
       <div class="ov-grid">
-        ${c.hasStress ? `<div class="ov-cell">
+        <div class="ov-cell">
           <span class="stepper-label">Stress</span>
           <span class="stepper compact">
             <button class="btn-round" data-act="stat" data-id="${c.id}" data-field="stress" data-d="-1" aria-label="Stress verringern">−</button>
@@ -290,38 +367,31 @@ function overviewView() {
           </span>
           <div class="meter"><div style="width:${c.stress * 10}%"></div></div>
           <div class="resp-btns">
-            <button class="btn btn-tiny btn-stress" data-act="quick-stress" data-id="${c.id}" ${broken ? 'disabled' : ''}>Stress-Wurf</button>
-            <button class="btn btn-tiny btn-panic" data-act="quick-panic" data-id="${c.id}" ${broken ? 'disabled' : ''}>Panik-Wurf</button>
+            <button class="btn btn-tiny btn-stress" data-act="quick-stress" data-id="${c.id}" ${broken ? 'disabled' : ''}>Stress Response</button>
+            <button class="btn btn-tiny btn-panic" data-act="quick-panic" data-id="${c.id}" ${broken ? 'disabled' : ''}>Panic Roll</button>
           </div>
-        </div>` : '<div class="ov-cell"><span class="stepper-label">Stress</span><span class="muted">—</span></div>'}
-        <div class="ov-cell">
-          <span class="stepper-label">Health</span>
-          <span class="stepper compact">
-            <button class="btn-round" data-act="stat" data-id="${c.id}" data-field="health" data-d="-1" aria-label="Health verringern">−</button>
-            <span class="stepper-value">${c.health.current}<small>/${c.health.max}</small></span>
-            <button class="btn-round" data-act="stat" data-id="${c.id}" data-field="health" data-d="1" aria-label="Health erhöhen">+</button>
-          </span>
-          <div class="meter health"><div style="width:${c.health.max ? clamp(c.health.current / c.health.max, 0, 1) * 100 : 0}%"></div></div>
         </div>
+        ${healthCell(c)}
       </div>
-      ${broken && c.hasStress ? '<p class="hint">Broken: kein weiterer Stress, keine Panikwürfe.</p>' : ''}
+      ${broken ? '<p class="hint">Broken: kein weiterer Stress, keine Panic Rolls.</p>' : ''}
       ${lastRollHtml(c)}
       <div class="top-rolls">${top}</div>
       <div class="ov-facts">
         <span>Resolve <b>${c.resolve}</b></span>
-        <span>Armor <b>${esc(c.armor.level) || '—'}</b></span>
+        <span>Armor Level <b>${esc(c.armor.level) || '—'}</b></span>
       </div>
-      <div class="chips">${activeResponseChips(c)}${anyPanic ? `<button class="chip chip-btn" data-act="end-panic" data-id="${c.id}">Panik beenden</button>` : ''}</div>
+      <div class="chips">${activeResponseChips(c)}${anyPanic ? `<button class="chip chip-btn" data-act="end-panic" data-id="${c.id}">Panic beenden</button>` : ''}</div>
     </div>`;
   }).join('');
 
   return `<div class="segments">${filters}</div>${rows || '<p class="empty">Keine Charaktere vorhanden.</p>'}`;
 }
 
-function editView(id, newType) {
+function editView(id, newType, draft = null) {
   const isNew = !id;
-  const c = isNew ? store.newCharacter(newType) : store.get(id);
+  const c = draft || (isNew ? store.newCharacter(newType) : store.get(id));
   if (!c) return notFound();
+  const isPC = c.type === 'PC';
 
   const text = (name, label, value, attrs = '') => `<label class="field"><span>${label}</span><input name="${name}" value="${esc(value)}" ${attrs}></label>`;
   const num = (name, label, value, min = 0, max = 99) => `<label class="field num"><span>${label}</span><input type="number" inputmode="numeric" name="${name}" value="${esc(value)}" min="${min}" max="${max}"></label>`;
@@ -338,15 +408,15 @@ function editView(id, newType) {
   const attrFields = ATTRIBUTES.map((a) => `
     <fieldset class="attr-edit">
       <legend>${a.label}</legend>
-      ${num(`attributes.${a.key}`, 'Wert', c.attributes[a.key], 1, 10)}
+      ${num(`attributes.${a.key}`, 'Value', c.attributes[a.key], 1, 10)}
       ${skillsFor(a.key).map((s) => num(`skills.${s.key}`, s.label, c.skills[s.key], 0, 5)).join('')}
     </fieldset>`).join('');
 
   const weaponFields = c.weapons.map((w, i) => `
     <fieldset class="row-edit">
-      <legend>Waffe ${i + 1}</legend>
-      ${text(`weapons.${i}.name`, 'Name', w.name)}
-      <label class="field"><span>Skill für Würfelwurf</span>
+      <legend>Weapon ${i + 1}</legend>
+      ${text(`weapons.${i}.name`, 'Name', w.name, `list="dl-weapons" data-autofill="weapon" data-row="${i}"`)}
+      <label class="field"><span>Skill</span>
         <select name="weapons.${i}.skill">
           ${['closeCombat', 'rangedCombat', 'heavyMachinery'].map((k) => `<option value="${k}" ${w.skill === k ? 'selected' : ''}>${skillByKey(k).label}</option>`).join('')}
         </select>
@@ -364,38 +434,76 @@ function editView(id, newType) {
 
   const gearFields = c.gear.map((g, i) => `
     <div class="field-row gear-edit">
-      ${text(`gear.${i}.name`, `${i + 1}.`, g.name)}
+      ${text(`gear.${i}.name`, `${i + 1}.`, g.name, `list="dl-gear" data-autofill="gear" data-row="${i}"`)}
       ${text(`gear.${i}.airPower`, 'Air/Power', g.airPower)}
       ${text(`gear.${i}.weight`, 'Weight', g.weight)}
     </div>`).join('');
 
-  return `
-    <form id="edit-form" data-id="${isNew ? '' : c.id}" data-type="${c.type}" autocomplete="off">
-      <h2>${isNew ? `Neuer ${c.type}` : `${esc(c.name || 'Charakter')} bearbeiten`}</h2>
+  const armorFields = `
+    ${text('armor.name', 'Armor', c.armor.name, 'list="dl-armor" data-autofill="armor"')}
+    <div class="field-row">
+      ${text('armor.level', 'Armor Level', c.armor.level, 'inputmode="numeric"')}
+      ${text('armor.weight', 'Weight', c.armor.weight)}
+    </div>`;
 
+  const actions = `
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Speichern</button>
+        <a class="btn" href="${isNew ? '#/' : `#/c/${c.id}`}">Abbrechen</a>
+      </div>
+      ${isNew ? '' : `<button type="button" class="btn btn-danger wide" data-act="delete" data-id="${c.id}">Charakter löschen</button>`}`;
+
+  const head = `
+      <h2>${isNew ? `Neuer ${c.type}` : `${esc(c.name || 'Charakter')} bearbeiten`}</h2>
       <div class="card form-sec">
         <label class="field"><span>Typ</span>
-          <select name="type">
-            <option value="PC" ${c.type === 'PC' ? 'selected' : ''}>PC (Spielercharakter)</option>
-            <option value="NPC" ${c.type === 'NPC' ? 'selected' : ''}>NPC</option>
+          <select name="type" data-retype>
+            <option value="PC" ${isPC ? 'selected' : ''}>PC (Spielercharakter)</option>
+            <option value="NPC" ${!isPC ? 'selected' : ''}>NPC</option>
           </select>
-        </label>
-        <label class="check"><input type="checkbox" name="hasStress" ${c.hasStress ? 'checked' : ''}>
-          <span><b>Hat Stress Level</b><small>Laut Regeln haben NPCs keinen Stress und pushen nie. Ohne Häkchen gibt es keine Stresswürfel.</small></span>
         </label>
         ${text('name', 'Name', c.name, 'required')}
         ${text('career', 'Career', c.career)}
       </div>
+      <p class="hint">Tipp: Namen von Weapons, Armor und Gear werden aus der Equipment-Liste vorgeschlagen; die Werte füllen sich dann automatisch.</p>`;
 
-      <div class="card form-sec"><h3>Attribute & Skills</h3><div id="points-live">${pointsHint(c)}</div>${attrFields}</div>
+  if (!isPC) {
+    return `
+    <form id="edit-form" data-id="${isNew ? '' : c.id}" data-type="NPC" autocomplete="off">
+      ${equipmentDatalists()}
+      ${head}
+      <div class="card form-sec"><h3>Attributes & Skills</h3>${attrFields}</div>
+      <div class="card form-sec">
+        <h3>Health</h3>
+        <div class="field-row">
+          ${num('health.current', 'Health', c.health.current, 0, 20)}
+          ${derived('health', 'health.max', 'Max Health', c.health.max, 20)}
+        </div>
+      </div>
+      <div class="card form-sec"><h3>Persönlichkeit</h3>
+        ${NPC_FIELDS.map((f) => area(`npc.${f.key}`, f.label, c.npc[f.key], 2)).join('')}
+      </div>
+      <div class="card form-sec"><h3>Talents</h3>${area('talents', 'Talents', c.talents, 3)}</div>
+      <div class="card form-sec"><h3>Armor & Gear</h3>${armorFields}<h4>Gear</h4>${gearFields}</div>
+      <div class="card form-sec"><h3>Weapons</h3>${weaponFields}</div>
+      <div class="card form-sec">${area('notes', 'Notizen', c.notes, 4)}</div>
+      ${actions}
+    </form>`;
+  }
+
+  return `
+    <form id="edit-form" data-id="${isNew ? '' : c.id}" data-type="PC" autocomplete="off">
+      ${equipmentDatalists()}
+      ${head}
+      <div class="card form-sec"><h3>Attributes & Skills</h3><div id="points-live">${pointsHint(c)}</div>${attrFields}</div>
 
       <div class="card form-sec">
-        <h3>Zustand</h3>
+        <h3>Health & Stress</h3>
         <div class="field-row">
-          ${num('health.current', 'Health aktuell', c.health.current, 0, 20)}
-          ${derived('health', 'health.max', 'Health max', c.health.max, 20)}
+          ${num('health.current', 'Health', c.health.current, 0, 20)}
+          ${derived('health', 'health.max', 'Max Health', c.health.max, 20)}
         </div>
-        <p class="hint">Health max = (Strength + Agility) ÷ 2, Resolve = (Wits + Empathy) ÷ 2, jeweils aufgerundet. Encumbrance max = Strength × 2. Die Werte passen sich automatisch an, solange du sie nicht von Hand änderst.</p>
+        <p class="hint">Max Health = (Strength + Agility) ÷ 2, Resolve = (Wits + Empathy) ÷ 2, jeweils aufgerundet. Max Encumbrance = Strength × 2. Die Werte passen sich automatisch an, solange du sie nicht von Hand änderst.</p>
         <div class="field-row">
           ${num('stress', 'Stress Level', c.stress, 0, MAX_STRESS)}
           ${derived('resolve', 'resolve', 'Resolve', c.resolve, 20)}
@@ -409,7 +517,7 @@ function editView(id, newType) {
       </div>
 
       <div class="card form-sec">
-        <h3>Persönliches</h3>
+        <h3>Personal Agenda & Talents</h3>
         ${area('appearance', 'Appearance', c.appearance)}
         ${area('agenda', 'Personal Agenda', c.agenda)}
         ${text('buddy', 'Buddy', c.buddy)}
@@ -418,18 +526,14 @@ function editView(id, newType) {
       </div>
 
       <div class="card form-sec">
-        <h3>Armor & Ausrüstung</h3>
-        ${text('armor.name', 'Armor', c.armor.name)}
-        <div class="field-row">
-          ${text('armor.level', 'Armor Level', c.armor.level, 'inputmode="numeric"')}
-          ${text('armor.weight', 'Armor Weight', c.armor.weight)}
-        </div>
+        <h3>Armor & Gear</h3>
+        ${armorFields}
         <div class="field-row">
           <div class="field"><span>Encumbrance</span><div id="enc-live" class="enc-box">${encHtml(c)}</div></div>
-          ${derived('encMax', 'encumbrance.max', 'Encumbrance max', c.encumbrance.max, 99)}
+          ${derived('encMax', 'encumbrance.max', 'Max Encumbrance', c.encumbrance.max, 99)}
           ${text('cash', 'Cash', c.cash)}
         </div>
-        <p class="hint">Encumbrance wird aus den Weight-Werten von Gear, Waffen und Armor berechnet (z. B. 1, 2, ½ oder 0,5).</p>
+        <p class="hint">Encumbrance wird aus den Weight-Werten von Gear, Weapons und Armor berechnet (z. B. 1, 2, ½ oder 0,5).</p>
         ${text('signatureItem', 'Signature Item', c.signatureItem)}
         ${area('tinyItems', 'Tiny Items', c.tinyItems)}
         <h4>Gear</h4>
@@ -442,12 +546,7 @@ function editView(id, newType) {
         ${area('injuries', 'Critical Injuries & Mental Trauma', c.injuries, 3)}
         ${area('notes', 'Notizen', c.notes, 4)}
       </div>
-
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Speichern</button>
-        <a class="btn" href="${isNew ? '#/' : `#/c/${c.id}`}">Abbrechen</a>
-      </div>
-      ${isNew ? '' : `<button type="button" class="btn btn-danger wide" data-act="delete" data-id="${c.id}">Charakter löschen</button>`}
+      ${actions}
     </form>`;
 }
 
@@ -456,20 +555,20 @@ function dataView() {
   return `
     <h2>Daten & Backup</h2>
     <div class="card form-sec">
-      <p>Alle Charaktere (${n}) liegen nur lokal auf diesem Gerät im Browser-Speicher. Mach regelmäßig ein Backup, vor allem bevor du Browserdaten löschst.</p>
+      <p>Alle Charaktere (${n}), Orte und eigene Equipment-Änderungen liegen nur lokal auf diesem Gerät im Browser-Speicher. Mach regelmäßig ein Backup, vor allem bevor du Browserdaten löschst.</p>
       <button class="btn btn-primary wide" data-act="export">Backup exportieren (JSON)</button>
       <label class="btn wide file-btn">Backup importieren
         <input type="file" accept="application/json,.json" data-act="import" hidden>
       </label>
-      <p class="hint">Beim Import werden Charaktere mit gleicher ID überschrieben, neue kommen dazu. Nichts wird gelöscht.</p>
+      <p class="hint">Beim Import werden Einträge mit gleicher ID überschrieben, neue kommen dazu. Nichts wird gelöscht.</p>
     </div>
     <div class="card form-sec">
       <h3>Punkteprüfung</h3>
       <p class="hint">Zeigt auf dem Charakterbogen von PCs einen Hinweis, wenn zu wenige oder zu viele Punkte auf Attribute bzw. Skills verteilt sind. Nach Steigerungen durch Erfahrung am besten ausschalten.</p>
       <label class="check"><input type="checkbox" data-setting="checkPoints" ${settings().checkPoints ? 'checked' : ''}><span><b>Punkteprüfung aktiv</b></span></label>
       <div class="field-row">
-        <label class="field num"><span>Attributpunkte</span><input type="number" inputmode="numeric" min="0" max="40" data-setting="attrPoints" value="${settings().attrPoints}"></label>
-        <label class="field num"><span>Skillpunkte</span><input type="number" inputmode="numeric" min="0" max="60" data-setting="skillPoints" value="${settings().skillPoints}"></label>
+        <label class="field num"><span>Attribute Points</span><input type="number" inputmode="numeric" min="0" max="40" data-setting="attrPoints" value="${settings().attrPoints}"></label>
+        <label class="field num"><span>Skill Points</span><input type="number" inputmode="numeric" min="0" max="60" data-setting="skillPoints" value="${settings().skillPoints}"></label>
       </div>
     </div>`;
 }
@@ -521,8 +620,13 @@ export function render() {
     case 'edit': html = editView(arg); title = 'Bearbeiten'; back = `#/c/${arg}`; break;
     case 'new': html = editView(null, arg === 'NPC' ? 'NPC' : 'PC'); title = 'Neuer Charakter'; back = '#/'; break;
     case 'overview': html = overviewView(); tab = 'overview'; title = 'Übersicht'; break;
-    case 'data': html = dataView(); tab = 'data'; title = 'Daten'; break;
+    case 'data': html = dataView(); tab = 'data'; title = 'Daten'; back = '#/'; break;
     case 'rules': html = rulesView(); tab = 'rules'; title = 'Regeln'; break;
+    case 'equipment': html = equipmentView(); tab = 'equipment'; title = 'Equipment'; break;
+    case 'item': html = itemEditView(arg); tab = 'equipment'; title = 'Item bearbeiten'; back = '#/equipment'; break;
+    case 'locations': html = locationsView(); tab = 'locations'; title = 'Orte'; break;
+    case 'loc': html = locationView(arg); tab = 'locations'; title = 'Ort'; back = '#/locations'; break;
+    case 'loc-edit': html = locationEditView(arg); tab = 'locations'; title = 'Ort bearbeiten'; back = arg === 'new' ? '#/locations' : `#/loc/${arg}`; break;
     default: html = listView();
   }
 
@@ -576,7 +680,7 @@ function quickPanic(id) {
     const notes = [];
     if (r.bumped) notes.push('Das Ergebnis war bereits aktiv, deshalb die nächsthöhere Response.');
     if (r.response.track) notes.push(PANIC_ENDS);
-    if (r.trauma) notes.push('Panikwurf 9+: Nach der Sitzung Empathy-Wurf (kein Push) gegen mentales Trauma.');
+    if (r.trauma) notes.push('Panic Roll 9+: Nach der Sitzung Empathy-Wurf (kein Push) gegen Mental Trauma.');
     c.lastRoll = {
       kind: 'panic', die: r.die, stress: r.stress, resolve: r.resolve, total: r.total,
       label: r.response.label, effect: r.response.effect, duration: r.response.duration,
@@ -589,7 +693,8 @@ function quickPanic(id) {
 
 function readForm(form) {
   const id = form.dataset.id;
-  const c = id ? structuredClone(store.get(id)) : store.newCharacter(form.dataset.type);
+  const c = id && store.get(id) ? structuredClone(store.get(id)) : store.newCharacter(form.dataset.type);
+  if (id) c.id = id;
   for (const el of form.elements) {
     if (!el.name) continue;
     const path = el.name.split('.');
@@ -601,9 +706,9 @@ function readForm(form) {
     else if (el.type === 'number') target[key] = el.value === '' ? 0 : Number(el.value);
     else target[key] = el.value;
   }
-  c.stress = clamp(c.stress, 0, MAX_STRESS);
+  c.hasStress = c.type === 'PC';
+  c.stress = c.hasStress ? clamp(c.stress, 0, MAX_STRESS) : 0;
   c.health.current = clamp(c.health.current, 0, Math.max(c.health.max, 0));
-  if (!c.hasStress) c.stress = 0;
   return c;
 }
 
@@ -626,6 +731,7 @@ document.addEventListener('click', (e) => {
   if (!el) return;
   const { act, id } = el.dataset;
   if (act.startsWith('dlg-')) return handleRollAction(act, el);
+  if (el.tagName === 'INPUT') return; // Checkboxen/Dateien laufen über 'change'
 
   switch (act) {
     case 'filter':
@@ -654,7 +760,7 @@ document.addEventListener('click', (e) => {
       break;
     case 'end-panic':
       store.update(id, (c) => { PANIC_RESPONSES.forEach((r) => { c.panic[r.key] = false; }); });
-      toast('Panik beendet');
+      toast('Panic beendet');
       render();
       break;
     case 'toggle-fatigued':
@@ -678,6 +784,24 @@ document.addEventListener('click', (e) => {
       }
       break;
     }
+    case 'eq-random':
+      randomPick(el.dataset.cat);
+      break;
+    case 'eq-assign':
+      openAssign(el.dataset.item);
+      break;
+    case 'eq-assign-to':
+      assignItem(id, el.dataset.item);
+      break;
+    case 'pick-close':
+      closePick();
+      break;
+    case 'eq-reset':
+      resetItem(el.dataset.item);
+      break;
+    case 'loc-delete':
+      deleteLocation(id);
+      break;
     case 'export':
       download(`alien-rpg-backup-${new Date().toISOString().slice(0, 10)}.json`, store.exportJson());
       break;
@@ -700,8 +824,8 @@ document.addEventListener('change', async (e) => {
     toast('Gespeichert');
   } else if (el.dataset.act === 'import' && el.files?.[0]) {
     try {
-      const { added, updated } = store.importJson(await el.files[0].text());
-      toast(`Import: ${added} neu, ${updated} aktualisiert`);
+      const { added, updated, locs } = store.importJson(await el.files[0].text());
+      toast(`Import: ${added} neu, ${updated} aktualisiert${locs ? `, ${locs} Orte` : ''}`);
       render();
     } catch (err) {
       alert(`Import fehlgeschlagen: ${err.message}`);
@@ -712,7 +836,13 @@ document.addEventListener('change', async (e) => {
 // Formular live nachrechnen: Regelwerte, Encumbrance, Punkte-Hinweis.
 function refreshForm(form, target) {
   const input = (name) => form.elements.namedItem(name);
-  if (target?.name === 'type') input('hasStress').checked = target.value === 'PC';
+  if (target?.name === 'type') {
+    // Formular für den anderen Typ neu aufbauen, Eingaben bleiben erhalten.
+    const draft = readForm(form);
+    draft.type = target.value;
+    $main.innerHTML = editView(form.dataset.id || null, draft.type, draft);
+    return;
+  }
 
   const attrs = Object.fromEntries(ATTRIBUTES.map((a) => [a.key, Number(input(`attributes.${a.key}`).value) || 0]));
   for (const el of form.querySelectorAll('[data-derive]')) {
@@ -732,17 +862,40 @@ function refreshForm(form, target) {
   }
 
   const c = readForm(form);
-  form.querySelector('#enc-live').innerHTML = encHtml(c);
-  form.querySelector('#points-live').innerHTML = pointsHint(c);
+  const enc = form.querySelector('#enc-live');
+  if (enc) enc.innerHTML = encHtml(c);
+  const pts = form.querySelector('#points-live');
+  if (pts) pts.innerHTML = pointsHint(c);
+}
+
+// Namen aus der Equipment-Liste: passende Werte automatisch eintragen.
+function autofill(form, el) {
+  const kind = el.dataset.autofill;
+  const it = store.findItem(el.value, kind === 'weapon' ? ['weapon'] : kind === 'armor' ? ['armor'] : null);
+  if (!it) return false;
+  const set = (name, v) => { const f = form.elements.namedItem(name); if (f) f.value = v; };
+  const i = el.dataset.row;
+  const vals = kind === 'weapon' ? fillWeapon(it) : kind === 'armor' ? fillArmor(it) : fillGear(it);
+  const prefix = kind === 'weapon' ? `weapons.${i}.` : kind === 'armor' ? 'armor.' : `gear.${i}.`;
+  for (const [k, v] of Object.entries(vals)) set(prefix + k, v);
+  toast(`${it.name}: Werte übernommen`);
+  return true;
 }
 
 document.addEventListener('input', (e) => {
   const form = e.target.closest('#edit-form');
-  if (form) refreshForm(form, e.target);
+  if (form) {
+    if (e.target.dataset.autofill && e.target.value) autofill(form, e.target);
+    refreshForm(form, e.target);
+  }
   if (e.target.id === 'rule-search') filterRules(e.target.value);
+  if (e.target.id === 'eq-search') filterEquipment(e.target.value);
+  if (e.target.id === 'loc-search') filterLocations(e.target.value);
 });
 
 document.addEventListener('submit', (e) => {
+  if (e.target.id === 'item-form') { e.preventDefault(); saveItemForm(e.target); return; }
+  if (e.target.id === 'loc-form') { e.preventDefault(); saveLocationForm(e.target); return; }
   if (e.target.id !== 'edit-form') return;
   e.preventDefault();
   const c = store.save(readForm(e.target));
